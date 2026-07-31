@@ -170,10 +170,9 @@ export function mountEditor(root, { onChange, onSelect }) {
         return;
       }
       // A filled region starts an art drag instead of a rubber-band select.
-      if (!el.draggable) {
-        dragging = true;
-        el.setPointerCapture?.(e.pointerId);
-      }
+      // Do not capture the pointer here: capture would send every later event
+      // to this one element, and the sweep needs pointerenter on its neighbours.
+      if (!el.draggable) dragging = true;
       anchor = rg;
       focus = rg;
       render();
