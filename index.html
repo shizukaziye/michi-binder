@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Michi Method Binder Designer</title>
+<meta name="description" content="Design Pokémon card binder pages the Michi way: spread one artwork across several pockets, leave space on purpose, then print inserts at true card size.">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23e4577f'/><g fill='white'><rect x='6' y='6' width='8' height='11' rx='1.5'/><rect x='18' y='6' width='8' height='11' rx='1.5'/><rect x='6' y='19' width='20' height='7' rx='1.5'/></g></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <h1>Michi Binder</h1>
+  </div>
+
+  <div class="binder-controls">
+    <label class="sr-only" for="binderPicker">Choose a binder</label>
+    <select id="binderPicker" class="btn select"></select>
+    <label class="sr-only" for="binderName">Binder name</label>
+    <input id="binderName" class="btn name-input" type="text" placeholder="Binder name" maxlength="60">
+    <button type="button" id="newBinder" class="btn">New</button>
+    <button type="button" id="deleteBinder" class="btn danger">Delete</button>
+  </div>
+
+  <div class="file-controls">
+    <button type="button" id="share" class="btn">Copy link</button>
+    <button type="button" id="export" class="btn">Export</button>
+    <button type="button" id="import" class="btn">Import</button>
+    <select id="printMode" class="btn select" aria-label="Print size">
+      <option value="true">True size</option>
+      <option value="fit">Fit to page</option>
+    </select>
+    <button type="button" id="print" class="btn primary">Print</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="panel" id="searchPanel" aria-label="Card search"></aside>
+
+  <section class="workspace">
+    <div class="toolbar">
+      <div class="tool-group" role="group" aria-label="Page size">
+        <span class="tool-label">Page</span>
+        <button type="button" class="btn preset" data-size="2x2">2×2</button>
+        <button type="button" class="btn preset" data-size="3x3">3×3</button>
+        <button type="button" class="btn preset" data-size="4x4">4×4</button>
+        <label class="sr-only" for="cols">Columns</label>
+        <select id="cols" class="btn select tiny" title="Columns">
+          <option>1</option><option>2</option><option>3</option><option>4</option>
+        </select>
+        <span class="times">×</span>
+        <label class="sr-only" for="rows">Rows</label>
+        <select id="rows" class="btn select tiny" title="Rows">
+          <option>1</option><option>2</option><option>3</option><option>4</option>
+        </select>
+      </div>
+
+      <div class="tool-group" role="group" aria-label="Selection">
+        <span class="tool-label" id="selLabel">Nothing selected</span>
+        <button type="button" id="merge" class="btn" title="Join the selected pockets into one panel (M)">Merge</button>
+        <button type="button" id="split" class="btn" title="Break the panel back into pockets (S)">Split</button>
+        <button type="button" id="fit" class="btn" title="Fill the panel, or show the whole card">Fit: fill</button>
+        <button type="button" id="blank" class="btn" title="Mark as left blank on purpose (B)">Blank</button>
+        <button type="button" id="upload" class="btn" title="Use your own image for this pocket">Upload</button>
+        <button type="button" id="clear" class="btn danger" title="Empty the selection (Delete)">Clear</button>
+      </div>
+    </div>
+
+    <p class="size-note" id="sizeNote" hidden></p>
+
+    <div class="canvas-wrap">
+      <div id="canvas" class="canvas"></div>
+    </div>
+
+    <div class="page-nav">
+      <button type="button" id="prevPage" class="btn" title="Previous page (←)">‹</button>
+      <span class="page-label" id="pageLabel">Page 1 of 1</span>
+      <button type="button" id="nextPage" class="btn" title="Next page (→)">›</button>
+      <div class="page-strip" id="pageStrip" aria-label="Pages"></div>
+      <button type="button" id="addPage" class="btn">Add page</button>
+      <button type="button" id="duplicatePage" class="btn">Duplicate</button>
+      <button type="button" id="deletePage" class="btn danger">Delete page</button>
+    </div>
+
+    <details class="help">
+      <summary>How to use it</summary>
+      <ul>
+        <li>Search on the left, then click a card to drop it in the selected pocket, or drag it straight onto the page.</li>
+        <li>Click a pocket, then shift-click another to select a rectangle. <b>Merge</b> turns it into one panel and the artwork spreads across it. <b>Split</b> undoes that.</li>
+        <li>Drag a card between pockets to swap them.</li>
+        <li><b>Blank</b> marks a pocket as left empty on purpose, which is part of the method rather than an oversight.</li>
+        <li><b>Upload</b> puts your own image in a pocket, for printed inserts.</li>
+        <li>Shortcuts: <kbd>M</kbd> merge, <kbd>S</kbd> split, <kbd>B</kbd> blank, <kbd>Delete</kbd> clear, <kbd>Esc</kbd> deselect, <kbd>←</kbd> <kbd>→</kbd> pages, <kbd>Ctrl</kbd>+<kbd>F</kbd> search.</li>
+        <li>Everything saves in this browser as you go. <b>Export</b> writes a file you can keep or move; <b>Copy link</b> makes a link that carries the design, though not your uploads.</li>
+        <li>Printing lays pockets flush at 63×88 mm with cut guides, so a panel stays continuous across the cards you cut.</li>
+      </ul>
+    </details>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>Card data and images from <a href="https://tcgdex.dev" target="_blank" rel="noopener">TCGdex</a>.
+  Pokémon and all card artwork are © Nintendo / Creatures Inc. / GAME FREAK inc.
+  This is an unofficial fan tool with no affiliation and nothing for sale.</p>
+</footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<input type="file" id="fileInput" accept="image/*" hidden>
+<input type="file" id="importInput" accept="application/json,.json" hidden>
+<div id="printArea" class="print-area" aria-hidden="true"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
