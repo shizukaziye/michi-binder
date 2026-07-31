@@ -2,9 +2,11 @@
 
 import * as data from './data.js';
 import * as store from './storage.js';
-import { makePage, resize, MIN_DIM, MAX_DIM } from './layout.js';
+import * as inserts from './inserts.js';
+import { makePage, resize, spanCols, spanRows, MIN_DIM, MAX_DIM } from './layout.js';
 import { mountSearch } from './search.js';
 import { mountEditor } from './editor.js';
+import { mountInserts } from './insertsPanel.js';
 import { printBinder, oversizeNote, fitsOnA4 } from './print.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -14,6 +16,7 @@ let current = null;
 let pageIndex = 0;
 let editor = null;
 let searchPanel = null;
+let insertPanel = null;
 
 const page = () => current.pages[pageIndex];
 
@@ -109,7 +112,6 @@ function onSelect({ regions, single, canMerge, canSplit }) {
   $('#clear').disabled = !any;
   $('#blank').disabled = !any;
   $('#fit').disabled = !single || !(single.card || single.upload);
-  $('#upload').disabled = !single;
 
   const label = $('#selLabel');
   if (!any) {
@@ -119,7 +121,7 @@ function onSelect({ regions, single, canMerge, canSplit }) {
     const h = single.r1 - single.r0 + 1;
     const what = single.card
       ? (data.getCard(single.card)?.n ?? 'card')
-      : single.upload ? 'your insert'
+      : single.upload ? (inserts.get(single.upload)?.name || 'your insert')
       : single.empty ? 'blank on purpose' : 'free pocket';
     label.textContent = `${w}×${h} — ${what}`;
   } else {
@@ -169,11 +171,39 @@ const slug = (s) =>
 
 // --- start up --------------------------------------------------------------
 
+/** The size of the current selection, used to pre-set the cropper. */
+function selectionSize() {
+  const rg = editor?.selection().regions[0];
+  return rg ? { cols: spanCols(rg), rows: spanRows(rg) } : { cols: 1, rows: 1 };
+}
+
 async function boot() {
-  editor = mountEditor($('#canvas'), { onChange, onSelect });
+  editor = mountEditor($('#canvas'), {
+    onChange,
+    onSelect,
+    onNotice: toast,
+    // A picture dropped straight onto the page goes through the cropper first.
+    onFileDrop: (files, where) => {
+      showTab('inserts');
+      insertPanel.intake(files, where);
+    },
+  });
   searchPanel = mountSearch($('#searchPanel'), {
     onPick: (cardId) => editor.assignCard(cardId),
   });
+  insertPanel = mountInserts($('#insertsPanel'), {
+    onPlace: (id, region) => editor.placeInsert(id, region),
+    selectionSize,
+    onToast: toast,
+  });
+
+  // Inserts first: the canvas looks them up synchronously while it draws.
+  try {
+    await inserts.init();
+    insertPanel.render();
+  } catch {
+    toast('Your saved inserts could not be opened in this browser.', 'error');
+  }
 
   binders = store.loadBinders();
   const savedId = store.loadCurrentId();
@@ -202,7 +232,6 @@ async function boot() {
     await data.load();
     searchPanel.start();
     editor.render();
-    store.pruneUploads(binders);
   } catch (err) {
     $('#searchPanel').querySelector('#count').textContent =
       'The card index did not load. Check your connection and reload.';
@@ -217,19 +246,16 @@ function wireControls() {
   $('#blank').addEventListener('click', () => editor.toggleEmpty());
   $('#fit').addEventListener('click', () => editor.toggleFit());
 
-  $('#upload').addEventListener('click', () => $('#fileInput').click());
-  $('#fileInput').addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    try {
-      const dataUrl = await store.downscale(file);
-      const res = store.saveUpload(dataUrl);
-      if (!res.ok) { toast(res.message, 'error'); return; }
-      editor.assignUpload(res.key);
-      toast('Insert added.');
-    } catch (err) {
-      toast(err.message || 'Could not use that image.', 'error');
+  // Panel tabs
+  $('#tabCards').addEventListener('click', () => showTab('cards'));
+  $('#tabInserts').addEventListener('click', () => showTab('inserts'));
+
+  // Paste an image anywhere that is not a text field.
+  document.addEventListener('paste', (e) => {
+    if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if (insertPanel.handlePaste(e.clipboardData)) {
+      e.preventDefault();
+      showTab('inserts');
     }
   });
 
@@ -291,9 +317,13 @@ function wireControls() {
   });
 
   // Files and links
-  $('#export').addEventListener('click', () => {
-    download(`${slug(current.name)}.michi.json`, store.exportBinder(current));
-    toast('Binder exported.');
+  $('#export').addEventListener('click', async () => {
+    try {
+      download(`${slug(current.name)}.michi.json`, await store.exportBinder(current));
+      toast('Binder exported, inserts included.');
+    } catch (err) {
+      toast(err.message || 'Could not export that binder.', 'error');
+    }
   });
   $('#import').addEventListener('click', () => $('#importInput').click());
   $('#importInput').addEventListener('change', async (e) => {
@@ -301,7 +331,9 @@ function wireControls() {
     e.target.value = '';
     if (!file) return;
     try {
-      addBinder(store.importBinder(await file.text()), 'Binder imported.');
+      const binder = await store.importBinder(await file.text());
+      insertPanel.render();
+      addBinder(binder, 'Binder imported.');
     } catch (err) {
       toast(err.message || 'That file could not be read.', 'error');
     }
@@ -350,6 +382,14 @@ function wireControls() {
       case 'ArrowRight': if (pageIndex < current.pages.length - 1) goToPage(pageIndex + 1); break;
     }
   });
+}
+
+function showTab(which) {
+  const cards = which === 'cards';
+  $('#tabCards').setAttribute('aria-selected', String(cards));
+  $('#tabInserts').setAttribute('aria-selected', String(!cards));
+  $('#searchPanel').hidden = !cards;
+  $('#insertsPanel').hidden = cards;
 }
 
 function applySize(rows, cols) {

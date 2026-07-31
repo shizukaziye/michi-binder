@@ -2,10 +2,10 @@
 // export/import and share links.
 
 import { makePage, reseedIds } from './layout.js';
+import * as inserts from './inserts.js';
 
 const BINDERS_KEY = 'michi.binders.v1';
 const CURRENT_KEY = 'michi.current.v1';
-const UPLOADS_KEY = 'michi.uploads.v1';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -52,82 +52,36 @@ export function saveBinders(binders) {
 export const loadCurrentId = () => read(CURRENT_KEY, null);
 export const saveCurrentId = (id) => write(CURRENT_KEY, id);
 
-// --- uploaded inserts ------------------------------------------------------
-// Kept out of the binder objects so a binder stays small and shareable.
-
-export const loadUploads = () => read(UPLOADS_KEY, {});
-
-export function saveUpload(dataUrl) {
-  const uploads = loadUploads();
-  const key = `u${uid()}`;
-  uploads[key] = dataUrl;
-  const res = write(UPLOADS_KEY, uploads);
-  return res.ok ? { ok: true, key } : res;
-}
-
-export function deleteUpload(key) {
-  const uploads = loadUploads();
-  delete uploads[key];
-  write(UPLOADS_KEY, uploads);
-}
-
-/** Drop uploads no binder points at any more. */
-export function pruneUploads(binders) {
-  const used = new Set();
-  for (const b of binders) {
-    for (const p of b.pages || []) {
-      for (const rg of p.regions || []) if (rg.upload) used.add(rg.upload);
-    }
-  }
-  const uploads = loadUploads();
-  let changed = false;
-  for (const key of Object.keys(uploads)) {
-    if (!used.has(key)) { delete uploads[key]; changed = true; }
-  }
-  if (changed) write(UPLOADS_KEY, uploads);
-}
-
-/**
- * Shrink a picked image before storing it. Full-size phone photos blow the
- * localStorage budget after two or three inserts.
- */
-export function downscale(file, maxEdge = 900, quality = 0.85) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read that file.'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('That file is not an image.'));
-      img.onload = () => {
-        const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
 // --- file export / import --------------------------------------------------
+// Inserts live in IndexedDB, so an export has to inline the pictures to be
+// worth anything on another machine.
 
-export function exportBinder(binder) {
-  const uploads = loadUploads();
-  const used = {};
+export async function exportBinder(binder) {
+  const used = new Set();
   for (const p of binder.pages) {
-    for (const rg of p.regions) {
-      if (rg.upload && uploads[rg.upload]) used[rg.upload] = uploads[rg.upload];
-    }
+    for (const rg of p.regions) if (rg.upload) used.add(rg.upload);
   }
-  return JSON.stringify({ format: 'michi-binder', version: 1, binder, uploads: used }, null, 2);
+
+  const packed = [];
+  for (const id of used) {
+    const item = inserts.get(id);
+    const blob = await inserts.blobOf(id);
+    if (!item || !blob) continue;
+    packed.push({
+      id,
+      cols: item.cols,
+      rows: item.rows,
+      name: item.name,
+      dataUrl: await inserts.toDataUrl(blob),
+    });
+  }
+
+  return JSON.stringify(
+    { format: 'michi-binder', version: 2, binder, inserts: packed }, null, 2
+  );
 }
 
-export function importBinder(text) {
+export async function importBinder(text) {
   const data = JSON.parse(text);
   if (data.format !== 'michi-binder' || !data.binder) {
     throw new Error('That file is not a binder export.');
@@ -135,23 +89,31 @@ export function importBinder(text) {
   const binder = data.binder;
   binder.id = uid();
 
-  // Re-key the uploads so importing twice does not collide.
-  if (data.uploads && Object.keys(data.uploads).length) {
-    const store = loadUploads();
-    const remap = {};
-    for (const [oldKey, dataUrl] of Object.entries(data.uploads)) {
-      const fresh = `u${uid()}`;
-      remap[oldKey] = fresh;
-      store[fresh] = dataUrl;
+  // Version 1 kept inserts as a flat map with no size, all of them one pocket.
+  const incoming = data.version >= 2
+    ? (data.inserts || [])
+    : Object.entries(data.uploads || {}).map(([id, dataUrl]) => (
+        { id, cols: 1, rows: 1, name: 'Insert', dataUrl }
+      ));
+
+  // Fresh ids, so importing the same file twice does not collide.
+  const remap = {};
+  for (const item of incoming) {
+    try {
+      const saved = await inserts.addFromDataUrl(
+        item.dataUrl, item.cols || 1, item.rows || 1, item.name || 'Insert'
+      );
+      remap[item.id] = saved.id;
+    } catch {
+      // Skip a picture we cannot read rather than lose the whole binder.
     }
-    for (const p of binder.pages) {
-      for (const rg of p.regions) {
-        if (rg.upload && remap[rg.upload]) rg.upload = remap[rg.upload];
-      }
-    }
-    const res = write(UPLOADS_KEY, store);
-    if (!res.ok) throw new Error(res.message);
   }
+  for (const p of binder.pages) {
+    for (const rg of p.regions) {
+      if (rg.upload) rg.upload = remap[rg.upload] || null;
+    }
+  }
+
   reseedIds(binder.pages);
   return binder;
 }

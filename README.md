@@ -15,7 +15,10 @@ card size.
   spreads across the whole block and cut guides show where the pockets divide.
 - Mark a pocket as **blank on purpose**, which the method treats as a choice
   rather than a gap.
-- Put your own image in a pocket, for printed inserts.
+- **Your own inserts.** Drop an image on the panel, paste one, or drop it
+  straight onto the page. Choose how many pockets it should fill, frame it in
+  the cropper, and it joins a library you can reuse. Drag one onto a page and it
+  claims exactly the pockets it was cut for.
 - Several named binders, each with as many pages as you like. Everything saves
   in the browser as you go.
 - Export a binder to a file, or copy a link that carries the whole design.
@@ -54,8 +57,13 @@ A GitHub Action reruns this every Monday and commits anything new.
   print-inserts-on-cardstock workflow.
 - A 4×4 page is 252×352 mm and does not fit A4. Print it on A3, or use
   "fit to page" for a proof you should not cut cards from.
-- Share links carry the layout and the card ids, not your uploaded images.
-  Use Export to keep those.
+- Inserts are cropped at 744 px across a pocket, which is 300 dpi at 63 mm, and
+  kept in IndexedDB. localStorage would be full after a handful — a 2×2 insert
+  runs past a megabyte — and IndexedDB stores the image itself rather than
+  base64, which is a third smaller again. Anything see-through resolves against
+  white, since inserts get printed on white card.
+- Share links carry the layout and the card ids, not your inserts. Export
+  inlines them into the file instead.
 
 ## Credits
 

@@ -38,7 +38,16 @@
 </header>
 
 <main class="layout">
-  <aside class="panel" id="searchPanel" aria-label="Card search"></aside>
+  <aside class="panel">
+    <div class="panel-tabs" role="tablist" aria-label="What to place">
+      <button type="button" class="tab" id="tabCards" role="tab"
+              aria-selected="true" aria-controls="searchPanel">Cards</button>
+      <button type="button" class="tab" id="tabInserts" role="tab"
+              aria-selected="false" aria-controls="insertsPanel">Your inserts</button>
+    </div>
+    <div class="panel-body" id="searchPanel" role="tabpanel" aria-labelledby="tabCards"></div>
+    <div class="panel-body" id="insertsPanel" role="tabpanel" aria-labelledby="tabInserts" hidden></div>
+  </aside>
 
   <section class="workspace">
     <div class="toolbar">
@@ -64,7 +73,6 @@
         <button type="button" id="split" class="btn" title="Break the panel back into pockets (S)">Split</button>
         <button type="button" id="fit" class="btn" title="Fill the panel, or show the whole card">Fit: fill</button>
         <button type="button" id="blank" class="btn" title="Mark as left blank on purpose (B)">Blank</button>
-        <button type="button" id="upload" class="btn" title="Use your own image for this pocket">Upload</button>
         <button type="button" id="clear" class="btn danger" title="Empty the selection (Delete)">Clear</button>
       </div>
     </div>
@@ -92,7 +100,7 @@
         <li>Click a pocket, then shift-click another to select a rectangle. <b>Merge</b> turns it into one panel and the artwork spreads across it. <b>Split</b> undoes that.</li>
         <li>Drag a card between pockets to swap them.</li>
         <li><b>Blank</b> marks a pocket as left empty on purpose, which is part of the method rather than an oversight.</li>
-        <li><b>Upload</b> puts your own image in a pocket, for printed inserts.</li>
+        <li>Under <b>Your inserts</b>, drop an image, paste one, or drop it straight onto the page. Choose how many pockets it should fill, frame it, and it joins your library — then drag it onto a page like a card and it takes exactly that many pockets.</li>
         <li>Shortcuts: <kbd>M</kbd> merge, <kbd>S</kbd> split, <kbd>B</kbd> blank, <kbd>Delete</kbd> clear, <kbd>Esc</kbd> deselect, <kbd>←</kbd> <kbd>→</kbd> pages, <kbd>Ctrl</kbd>+<kbd>F</kbd> search.</li>
         <li>Everything saves in this browser as you go. <b>Export</b> writes a file you can keep or move; <b>Copy link</b> makes a link that carries the design, though not your uploads.</li>
         <li>Printing lays pockets flush at 63×88 mm with cut guides, so a panel stays continuous across the cards you cut.</li>
@@ -108,7 +116,6 @@
 </footer>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<input type="file" id="fileInput" accept="image/*" hidden>
 <input type="file" id="importInput" accept="application/json,.json" hidden>
 <div id="printArea" class="print-area" aria-hidden="true"></div>
 

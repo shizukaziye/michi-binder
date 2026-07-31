@@ -2,7 +2,7 @@
 
 import * as L from './layout.js';
 import { getCard, imageUrl, imageFallback, cardLabel } from './data.js';
-import { loadUploads } from './storage.js';
+import * as inserts from './inserts.js';
 
 export const CARD_W = 63; // mm, standard trading card
 export const CARD_H = 88;
@@ -17,7 +17,7 @@ function boundary(i, n) {
          ` + ${i - 1} * var(--gap) + var(--gap) / 2)`;
 }
 
-export function mountEditor(root, { onChange, onSelect }) {
+export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) {
   let page = null;
   let anchor = null;   // region the selection started from
   let focus = null;    // region the selection currently reaches
@@ -81,8 +81,10 @@ export function mountEditor(root, { onChange, onSelect }) {
 
   function artOf(rg) {
     if (rg.upload) {
-      const url = loadUploads()[rg.upload];
-      return url ? { src: url, alt: 'Your uploaded insert', fallback: null } : null;
+      const item = inserts.get(rg.upload);
+      return item
+        ? { src: item.url, alt: item.name || 'Your insert', fallback: null, title: item.name }
+        : null;
     }
     if (rg.card) {
       const card = getCard(rg.card);
@@ -192,8 +194,9 @@ export function mountEditor(root, { onChange, onSelect }) {
     el.addEventListener('dragend', () => el.classList.remove('dragging'));
 
     el.addEventListener('dragover', (e) => {
-      const types = e.dataTransfer.types;
-      if (types.includes('text/michi-card') || types.includes('text/michi-region')) {
+      const types = [...e.dataTransfer.types];
+      const wanted = ['text/michi-card', 'text/michi-region', 'text/michi-insert', 'Files'];
+      if (wanted.some((t) => types.includes(t))) {
         e.preventDefault();
         el.classList.add('drop-target');
       }
@@ -204,6 +207,19 @@ export function mountEditor(root, { onChange, onSelect }) {
       el.classList.remove('drop-target');
       const cardId = e.dataTransfer.getData('text/michi-card');
       const fromId = e.dataTransfer.getData('text/michi-region');
+      const insertId = e.dataTransfer.getData('text/michi-insert');
+      const files = [...(e.dataTransfer.files || [])];
+
+      if (insertId) {
+        dropInsert(rg, insertId);
+        return;
+      }
+      if (files.length) {
+        // Dropping a picture straight onto the page opens the cropper, already
+        // set to the size of the pocket it landed on.
+        onFileDrop?.(files, { cols: L.spanCols(rg), rows: L.spanRows(rg), region: rg });
+        return;
+      }
       if (cardId) {
         rg.card = cardId;
         rg.upload = null;
@@ -234,6 +250,36 @@ export function mountEditor(root, { onChange, onSelect }) {
     const cellW = (inner - (page.cols - 1) * gap) / page.cols;
     const cellH = (cellW * CARD_H) / CARD_W;
     grid.style.gridTemplateRows = `repeat(${page.rows}, ${cellH.toFixed(3)}px)`;
+  }
+
+  /**
+   * Drop an insert so it occupies exactly the pockets it was cropped for.
+   * The block is anchored at the pocket you dropped on, then pulled back if it
+   * would run off the edge.
+   */
+  function dropInsert(rg, id) {
+    const item = inserts.get(id);
+    if (!item) return;
+    if (item.cols > page.cols || item.rows > page.rows) {
+      onNotice?.(
+        `That insert fills ${item.cols}×${item.rows} pockets, more than this ` +
+        `${page.cols}×${page.rows} page holds.`, 'error');
+      return;
+    }
+
+    const c0 = Math.min(rg.c0, page.cols - item.cols);
+    const r0 = Math.min(rg.r0, page.rows - item.rows);
+    const rc = { r0, c0, r1: r0 + item.rows - 1, c1: c0 + item.cols - 1 };
+
+    const exact = page.regions.find(
+      (x) => x.r0 === rc.r0 && x.c0 === rc.c0 && x.r1 === rc.r1 && x.c1 === rc.c1
+    );
+    const target = exact || L.merge(page, rc);
+    target.upload = id;
+    target.card = null;
+    target.empty = false;
+    anchor = target; focus = target;
+    commit();
   }
 
   function render() {
@@ -295,13 +341,13 @@ export function mountEditor(root, { onChange, onSelect }) {
       anchor = target; focus = target;
       commit();
     },
-    assignUpload(key) {
-      const target = selectedRegions()[0];
-      if (!target) return;
-      target.upload = key;
-      target.card = null;
-      target.empty = false;
-      commit();
+    /**
+     * Place an insert. Given a region it lands there; otherwise it goes to the
+     * current selection.
+     */
+    placeInsert(id, rg) {
+      const target = (rg && L.findRegion(page, rg.id)) || selectedRegions()[0] || page.regions[0];
+      if (target) dropInsert(target, id);
     },
     clearSelected() {
       const regions = selectedRegions();

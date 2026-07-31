@@ -6,7 +6,7 @@
 
 import { CARD_W, CARD_H } from './editor.js';
 import { getCard, imageUrl, imageFallback, cardLabel } from './data.js';
-import { loadUploads } from './storage.js';
+import * as inserts from './inserts.js';
 import { spanRows, spanCols } from './layout.js';
 
 // A4 minus a 10 mm margin each side, the usable area for one binder page.
@@ -32,7 +32,7 @@ export function oversizeNote(page) {
          `but do not cut cards from it.`;
 }
 
-function drawPage(page, uploads, mode) {
+function drawPage(page, mode) {
   const wrap = document.createElement('section');
   wrap.className = 'print-page';
 
@@ -52,9 +52,10 @@ function drawPage(page, uploads, mode) {
     let src = null;
     let alt = '';
     let fallback = null;
-    if (rg.upload && uploads[rg.upload]) {
-      src = uploads[rg.upload];
-      alt = 'Uploaded insert';
+    const item = rg.upload ? inserts.get(rg.upload) : null;
+    if (item) {
+      src = item.url;
+      alt = item.name || 'Insert';
     } else if (rg.card) {
       const card = getCard(rg.card);
       if (card) {
@@ -105,9 +106,8 @@ function drawPage(page, uploads, mode) {
  * the sheet prints with gaps.
  */
 export async function printBinder(binder, mode, container) {
-  const uploads = loadUploads();
   container.replaceChildren();
-  for (const page of binder.pages) container.append(drawPage(page, uploads, mode));
+  for (const page of binder.pages) container.append(drawPage(page, mode));
 
   const images = [...container.querySelectorAll('img')];
   const settled = Promise.all(images.map((img) =>
