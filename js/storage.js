@@ -1,7 +1,7 @@
 // Saving: binders in localStorage, uploads kept separately, plus file
 // export/import and share links.
 
-import { makePage, reseedIds } from './layout.js';
+import { makePage, reseedIds, flatten } from './layout.js';
 import * as inserts from './inserts.js';
 
 const BINDERS_KEY = 'michi.binders.v1';
@@ -40,9 +40,12 @@ export function newBinder(name = 'Untitled binder') {
 
 // Older pages predate the spread flag; infer it once from the old rule (a page
 // twice as wide as tall was a combined spread) so they keep filling an opening.
+// They can also hold regions spanning several pockets, from before a pocket was
+// always one pocket, so break those into slices and keep the look.
 export function normalizePages(pages) {
   for (const p of pages || []) {
     if (p.spread === undefined) p.spread = p.cols === 2 * p.rows;
+    flatten(p);
   }
 }
 
@@ -157,7 +160,7 @@ function packBinder(binder) {
 function unpackBinder(packed) {
   if (!packed || packed.v !== 1) throw new Error('Unrecognised share link.');
   let n = 1;
-  return {
+  const binder = {
     id: uid(),
     name: packed.n || 'Shared binder',
     updatedAt: Date.now(),
@@ -172,11 +175,15 @@ function unpackBinder(packed) {
         r0, c0, r1, c1,
         card: card || null,
         upload: null,
+        slice: null,
         fit: FIT_BACK[fit] || 'cover',
         empty: !!empty,
       })),
     })),
   };
+  // A link made before pockets were always 1x1 can still carry spanning regions.
+  normalizePages(binder.pages);
+  return binder;
 }
 
 const toB64Url = (bytes) => {

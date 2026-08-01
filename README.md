@@ -11,19 +11,21 @@ card size.
 - Search 21,000+ cards by name, artist or set. The index ships with the page,
   so searching does not hit the network.
 - Pages from 1×1 up to 4×4, with 2×2, 3×3 and 4×4 presets.
-- Select any rectangle of pockets and **merge** it into one panel. The artwork
-  spreads across the whole block and cut guides show where the pockets divide.
+- **A pocket is always one pocket.** Nothing on a page spans two, which is how a
+  binder really works: artwork covering a block is cut into separate cards and
+  sleeved one by one.
 - Mark a pocket as **blank on purpose**, which the method treats as a choice
   rather than a gap.
 - **Your own inserts.** Drop an image on the panel, paste one, or drop it
   straight onto the page. Choose how many pockets it should fill, frame it in
   the cropper, and it joins a library you can reuse. Drag one onto a page and it
-  claims exactly the pockets it was cut for.
+  divides itself across the pockets it was cut for, a piece to each — so you can
+  clear or replace one piece without disturbing the rest.
 - Several named binders, each with as many pages as you like. Everything saves
   in the browser as you go.
 - Export a binder to a file, or copy a link that carries the whole design.
-- Print at 63×88 mm with the pockets flush, so a panel stays continuous across
-  the cards you cut out of it.
+- Print at 63×88 mm with the pockets flush, so the pieces of an insert line back
+  up into the whole picture before you cut them apart.
 
 ## Running it
 

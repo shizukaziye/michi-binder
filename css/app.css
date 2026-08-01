@@ -302,21 +302,13 @@ select.chip { border-radius: 999px; max-width: 190px; }
 .region-img { width: 100%; height: 100%; display: block; -webkit-user-drag: none; user-select: none; pointer-events: none; }
 .fit-cover .region-img { object-fit: cover; }
 .fit-contain .region-img { object-fit: contain; }
+/* One pocket's share of a picture covering a block of them. The gaps between
+   pockets stand in for the sleeve edges, so the block reads as cut cards. */
+.region-slice { position: absolute; inset: 0; pointer-events: none; }
+
 .region-note {
   position: absolute; inset: 0; display: grid; place-items: center;
   font-size: 11px; color: var(--dim); letter-spacing: .3px; pointer-events: none;
-}
-
-.cut-lines { position: absolute; inset: 0; pointer-events: none; }
-.cut-h, .cut-v { position: absolute; background: rgba(255,255,255,.55); mix-blend-mode: difference; }
-.cut-h { left: 0; right: 0; height: 1px; transform: translateY(-.5px); }
-.cut-v { top: 0; bottom: 0; width: 1px; transform: translateX(-.5px); }
-
-.span-badge {
-  position: absolute; top: 4px; left: 4px;
-  background: rgba(0,0,0,.62); color: #fff;
-  font-size: 10px; padding: 1px 5px; border-radius: 4px;
-  pointer-events: none; letter-spacing: .3px;
 }
 
 /* --- page navigation ------------------------------------------------------ */
@@ -407,10 +399,11 @@ kbd {
   .print-page:last-child { break-after: auto; page-break-after: auto; }
 
   .print-grid { display: grid; gap: 0; }
-  .print-region { position: relative; overflow: hidden; outline: .2mm solid #999; }
+  .print-region { position: relative; overflow: hidden; outline: .2mm solid #999; border-radius: 1.2mm; }
   .print-img { width: 100%; height: 100%; display: block; }
   .print-img.fit-cover { object-fit: cover; }
   .print-img.fit-contain { object-fit: contain; }
+  .print-slice { position: absolute; inset: 0; }
 
   .print-cut-h, .print-cut-v { position: absolute; background: #999; }
   .print-cut-h { left: 0; right: 0; height: .2mm; }

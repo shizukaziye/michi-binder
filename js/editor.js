@@ -8,13 +8,20 @@ export const CARD_W = 63; // mm, standard trading card
 export const CARD_H = 88;
 
 /**
- * Where the i-th pocket boundary falls inside a region spanning n pockets.
- * The region swallows the grid gaps it covers, so an even i/n split would drift
- * off the real seam; this puts the line down the middle of the gap.
+ * Show one part of a picture that covers several pockets.
+ *
+ * Scale the image up by the size of the block, then slide it so this pocket's
+ * share lands in view. Percentage background positions align the image's own
+ * fraction with the box's, so 0% is the first column and 100% the last.
  */
-function boundary(i, n) {
-  return `calc((100% - ${n - 1} * var(--gap)) / ${n} * ${i}` +
-         ` + ${i - 1} * var(--gap) + var(--gap) / 2)`;
+export function sliceStyle(src, { cols, rows, c, r }) {
+  return {
+    backgroundImage: `url("${src}")`,
+    backgroundSize: `${cols * 100}% ${rows * 100}%`,
+    backgroundPosition: `${cols > 1 ? (c / (cols - 1)) * 100 : 0}% ` +
+                        `${rows > 1 ? (r / (rows - 1)) * 100 : 0}%`,
+    backgroundRepeat: 'no-repeat',
+  };
 }
 
 export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, onMove }) {
@@ -38,27 +45,10 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
   /** The rectangle currently selected, or null. */
   function rect() {
     if (!anchor) return null;
-    const a = { r: anchor.r0, c: anchor.c0 };
     const bR = focus || anchor;
-    // Reach the far corner of the focused region so partial spans still merge.
-    const b = { r: bR.r1, c: bR.c1 };
-    const base = L.rectBetween(page, a, b);
-    // Grow to cover every region the rectangle touches, so a merge never
-    // slices an existing panel in half.
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const rg of page.regions) {
-        const hits = rg.r0 <= base.r1 && rg.r1 >= base.r0 &&
-                     rg.c0 <= base.c1 && rg.c1 >= base.c0;
-        if (!hits) continue;
-        if (rg.r0 < base.r0) { base.r0 = rg.r0; changed = true; }
-        if (rg.c0 < base.c0) { base.c0 = rg.c0; changed = true; }
-        if (rg.r1 > base.r1) { base.r1 = rg.r1; changed = true; }
-        if (rg.c1 > base.c1) { base.c1 = rg.c1; changed = true; }
-      }
-    }
-    return base;
+    // Pockets never span, so the rectangle between the two corners is the whole
+    // story -- nothing has to grow to avoid slicing a panel in half.
+    return L.rectBetween(page, { r: anchor.r0, c: anchor.c0 }, { r: bR.r0, c: bR.c0 });
   }
 
   function selectedRegions() {
@@ -76,8 +66,6 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
       rect: rc,
       regions,
       single: regions.length === 1 ? regions[0] : null,
-      canMerge: rc ? L.canMerge(page, rc) : false,
-      canSplit: regions.length === 1 && !L.isSingle(regions[0]),
     });
   }
 
@@ -122,7 +110,14 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
     if (rg.empty) el.classList.add('is-empty-by-design');
 
     const art = artOf(rg);
-    if (art) {
+    if (art && rg.slice) {
+      el.classList.add('filled', 'sliced');
+      const part = document.createElement('div');
+      part.className = 'region-slice';
+      Object.assign(part.style, sliceStyle(art.src, rg.slice));
+      part.title = art.title || art.alt;
+      el.append(part);
+    } else if (art) {
       el.classList.add('filled', `fit-${rg.fit}`);
       const img = document.createElement('img');
       img.className = 'region-img';
@@ -148,31 +143,8 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
       el.append(note);
     }
 
-    // Pocket boundaries drawn over spanned art, so you can see where to cut.
-    const rows = L.spanRows(rg);
-    const cols = L.spanCols(rg);
-    if (rows > 1 || cols > 1) {
-      const lines = document.createElement('div');
-      lines.className = 'cut-lines';
-      for (let i = 1; i < rows; i++) {
-        const line = document.createElement('i');
-        line.className = 'cut-h';
-        line.style.top = boundary(i, rows);
-        lines.append(line);
-      }
-      for (let i = 1; i < cols; i++) {
-        const line = document.createElement('i');
-        line.className = 'cut-v';
-        line.style.left = boundary(i, cols);
-        lines.append(line);
-      }
-      el.append(lines);
-      const badge = document.createElement('span');
-      badge.className = 'span-badge';
-      badge.textContent = `${cols}×${rows}`;
-      el.append(badge);
-    }
-
+    // No cut lines: the gaps between pockets already show where the picture
+    // divides, because each pocket really is its own card now.
     wireRegion(el, rg);
     return el;
   }
@@ -243,9 +215,17 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
         return;
       }
       if (files.length) {
-        // Dropping a picture straight onto the page opens the cropper, already
-        // set to the size of the pocket it landed on.
-        onFileDrop?.(files, { cols: L.spanCols(rg), rows: L.spanRows(rg), region: rg });
+        // Dropping a picture straight onto the page opens the cropper. If it
+        // landed inside a selected block, offer to fill the whole block;
+        // otherwise it is one picture for one pocket.
+        const rc = rect();
+        const inside = rc && rg.r0 >= rc.r0 && rg.r0 <= rc.r1 &&
+                       rg.c0 >= rc.c0 && rg.c0 <= rc.c1;
+        onFileDrop?.(files, {
+          cols: inside ? rc.c1 - rc.c0 + 1 : 1,
+          rows: inside ? rc.r1 - rc.r0 + 1 : 1,
+          region: inside ? L.regionAt(page, rc.r0, rc.c0) : rg,
+        });
         return;
       }
       if (cardId) {
@@ -292,18 +272,11 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
       return;
     }
 
-    const c0 = Math.min(rg.c0, page.cols - item.cols);
-    const r0 = Math.min(rg.r0, page.rows - item.rows);
-    const rc = { r0, c0, r1: r0 + item.rows - 1, c1: c0 + item.cols - 1 };
-
-    const exact = page.regions.find(
-      (x) => x.r0 === rc.r0 && x.c0 === rc.c0 && x.r1 === rc.r1 && x.c1 === rc.c1
-    );
-    const target = exact || L.merge(page, rc);
-    target.upload = id;
-    target.card = null;
-    target.empty = false;
-    anchor = target; focus = target;
+    const touched = L.placeInsert(page, rg.r0, rg.c0, id, item.cols, item.rows);
+    if (!touched || !touched.length) return;
+    // Select the whole block, so Clear empties the picture rather than a corner.
+    anchor = touched[0];
+    focus = touched[touched.length - 1];
     commit();
   }
 
@@ -409,26 +382,13 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
       render();
     },
 
-    merge() {
-      const rc = rect();
-      if (!rc || !L.canMerge(page, rc)) return;
-      const merged = L.merge(page, rc);
-      anchor = merged; focus = merged;
-      commit();
-    },
-    split() {
-      const regions = selectedRegions();
-      if (regions.length !== 1 || L.isSingle(regions[0])) return;
-      const first = L.split(page, regions[0].id);
-      anchor = first; focus = first;
-      commit();
-    },
     assignCard(cardId) {
       const regions = selectedRegions();
       const target = regions[0] || page.regions[0];
       if (!target) return;
       target.card = cardId;
       target.upload = null;
+      target.slice = null;
       target.empty = false;
       anchor = target; focus = target;
       commit();
@@ -453,7 +413,7 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
       const makeEmpty = !regions.every((rg) => rg.empty);
       for (const rg of regions) {
         rg.empty = makeEmpty;
-        if (makeEmpty) { rg.card = null; rg.upload = null; }
+        if (makeEmpty) { rg.card = null; rg.upload = null; rg.slice = null; }
       }
       commit();
     },

@@ -3,7 +3,7 @@
 import * as data from './data.js';
 import * as store from './storage.js';
 import * as inserts from './inserts.js';
-import { makePage, resize, spanCols, spanRows, reseedIds, fillGaps, swapContents, MIN_DIM, MAX_DIM } from './layout.js';
+import { makePage, resize, reseedIds, fillGaps, swapContents, MIN_DIM, MAX_DIM } from './layout.js';
 import { mountSearch } from './search.js';
 import { mountEditor } from './editor.js';
 import { mountInserts } from './insertsPanel.js';
@@ -256,25 +256,24 @@ function movePage(from, to) {
   toast(`Moved page to slot ${to + 1}.`);
 }
 
-function onSelect({ regions, single, canMerge, canSplit }) {
+function onSelect({ regions, single }) {
   const any = regions.length > 0;
-  $('#merge').disabled = !canMerge;
-  $('#split').disabled = !canSplit;
   $('#clear').disabled = !any;
   $('#blank').disabled = !any;
-  $('#fit').disabled = !single || !(single.card || single.upload);
+  // A slice is one part of a bigger picture; how it sits in its pocket is fixed.
+  $('#fit').disabled = !single || !!single.slice || !(single.card || single.upload);
 
   const label = $('#selLabel');
   if (!any) {
     label.textContent = 'Nothing selected';
   } else if (single) {
-    const w = single.c1 - single.c0 + 1;
-    const h = single.r1 - single.r0 + 1;
     const what = single.card
       ? (data.getCard(single.card)?.n ?? 'card')
       : single.upload ? (inserts.get(single.upload)?.name || 'your insert')
       : single.empty ? 'blank on purpose' : 'free pocket';
-    label.textContent = `${w}×${h} — ${what}`;
+    const part = single.slice
+      ? ` (part of ${single.slice.cols}×${single.slice.rows})` : '';
+    label.textContent = `${what}${part}`;
   } else {
     label.textContent = `${regions.length} pockets selected`;
   }
@@ -466,10 +465,16 @@ const slug = (s) =>
 
 // --- start up --------------------------------------------------------------
 
-/** The size of the current selection, used to pre-set the cropper. */
+/**
+ * How many pockets are selected, used to pre-set the cropper. A pocket is
+ * always one pocket now, so the answer comes from the selected rectangle:
+ * highlight two pockets, drop a picture, and it is cropped to fill both.
+ */
 function selectionSize() {
-  const rg = editor?.selection().regions[0];
-  return rg ? { cols: spanCols(rg), rows: spanRows(rg) } : { cols: 1, rows: 1 };
+  const rc = editor?.selection().rect;
+  return rc
+    ? { cols: rc.c1 - rc.c0 + 1, rows: rc.r1 - rc.r0 + 1 }
+    : { cols: 1, rows: 1 };
 }
 
 async function boot() {
@@ -546,8 +551,6 @@ async function boot() {
 function wireControls() {
   $('#undo').addEventListener('click', undo);
   $('#redo').addEventListener('click', redo);
-  $('#merge').addEventListener('click', () => editor.merge());
-  $('#split').addEventListener('click', () => editor.split());
   $('#clear').addEventListener('click', () => editor.clearSelected());
   $('#blank').addEventListener('click', () => editor.toggleEmpty());
   $('#fit').addEventListener('click', () => editor.toggleFit());
@@ -695,8 +698,6 @@ function wireControls() {
       e.preventDefault(); redo(); return;
     }
     switch (e.key) {
-      case 'm': editor.merge(); break;
-      case 's': editor.split(); break;
       case 'b': editor.toggleEmpty(); break;
       case 'Delete': case 'Backspace': e.preventDefault(); editor.clearSelected(); break;
       case 'Escape': editor.clearSelection(); break;

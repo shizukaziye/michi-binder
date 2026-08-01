@@ -1,9 +1,12 @@
 // The page model.
 //
-// A page is a rows x cols grid of pockets. It holds regions; a region covers a
-// rectangle of pockets and carries one artwork. Every pocket belongs to exactly
-// one region, so a fresh page is all 1x1 regions. Merging a rectangle is what
-// makes a Michi panel: one picture spread over several pockets.
+// A page is a rows x cols grid of pockets, and a pocket is always one pocket --
+// nothing on a page ever spans two. That matches the real thing: artwork
+// covering a block gets cut into separate cards, each sleeved on its own.
+//
+// A picture spread over several pockets is therefore not one big region but a
+// block of ordinary pockets, each carrying the same insert plus a `slice`
+// saying which part of it to show.
 
 export const MIN_DIM = 1;
 // Up to 8 so two pages can combine into a spread (e.g. 4x3 + 4x3 = 8x3).
@@ -18,10 +21,16 @@ export function makeRegion(r0, c0, r1, c1) {
     r0, c0, r1, c1,
     card: null,     // card id from the index
     upload: null,   // key into the uploads store
+    // Which part of a multi-pocket picture this pocket shows, as
+    // { cols, rows, c, r }. Null when the art fills this pocket on its own.
+    slice: null,
     fit: 'cover',
     empty: false,   // left blank on purpose, not merely unfilled
   };
 }
+
+/** A pocket at (r, c) holding nothing. */
+export const makeCell = (r, c) => makeRegion(r, c, r, c);
 
 export function makePage(rows = 3, cols = 3) {
   const page = { rows, cols, name: '', spread: false, regions: [] };
@@ -55,9 +64,6 @@ export function rectBetween(page, a, b) {
   };
 }
 
-const overlaps = (rg, rect) =>
-  rg.r0 <= rect.r1 && rg.r1 >= rect.r0 && rg.c0 <= rect.c1 && rg.c1 >= rect.c0;
-
 /**
  * Fill any pocket left without a region. Merging drops whole regions that
  * straddle the selection, which can leave holes outside it; those become 1x1s.
@@ -75,57 +81,41 @@ function sortRegions(page) {
   page.regions.sort((a, b) => a.r0 - b.r0 || a.c0 - b.c0);
 }
 
-export function canMerge(page, rect) {
-  const multi = rect.r1 > rect.r0 || rect.c1 > rect.c0;
-  if (!multi) return false;
-  // Already exactly one region covering precisely this rectangle?
-  const hit = page.regions.filter((rg) => overlaps(rg, rect));
-  if (hit.length === 1 && hit[0].r0 === rect.r0 && hit[0].c0 === rect.c0 &&
-      hit[0].r1 === rect.r1 && hit[0].c1 === rect.c1) return false;
-  return true;
-}
-
 /**
- * Collapse a rectangle into one region. Any region touching the rectangle is
- * removed whole; the first artwork found is carried over so a merge started
- * from a filled pocket keeps its picture.
+ * Break any region that still spans several pockets into single ones.
+ *
+ * Pages saved before pockets were always 1x1 can hold spanning regions, so
+ * every page is run through this on load. The look is preserved rather than
+ * lost: the art is sliced across the pockets it used to cover, which is what
+ * placing it today would produce anyway.
  */
-export function merge(page, rect) {
-  const touched = page.regions.filter((rg) => overlaps(rg, rect));
-  const donor = touched.find((rg) => rg.card || rg.upload);
-  page.regions = page.regions.filter((rg) => !overlaps(rg, rect));
-
-  const merged = makeRegion(rect.r0, rect.c0, rect.r1, rect.c1);
-  if (donor) {
-    merged.card = donor.card;
-    merged.upload = donor.upload;
-  }
-  page.regions.push(merged);
-  fillGaps(page);
-  return merged;
-}
-
-/** Break a region back into 1x1 pockets, keeping the art in the top-left one. */
-export function split(page, id) {
-  const rg = findRegion(page, id);
-  if (!rg || isSingle(rg)) return null;
-  page.regions = page.regions.filter((x) => x.id !== id);
-
-  let first = null;
-  for (let r = rg.r0; r <= rg.r1; r++) {
-    for (let c = rg.c0; c <= rg.c1; c++) {
-      const cell = makeRegion(r, c, r, c);
-      if (!first) {
-        first = cell;
-        cell.card = rg.card;
-        cell.upload = rg.upload;
-        cell.empty = rg.empty;
+export function flatten(page) {
+  const out = [];
+  for (const rg of page.regions) {
+    if (isSingle(rg)) {
+      out.push(rg);
+      continue;
+    }
+    const cols = spanCols(rg);
+    const rows = spanRows(rg);
+    const art = rg.card || rg.upload;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cell = makeCell(rg.r0 + r, rg.c0 + c);
+        if (art) {
+          cell.card = rg.card;
+          cell.upload = rg.upload;
+          cell.slice = { cols, rows, c, r };
+        } else if (r === 0 && c === 0) {
+          cell.empty = rg.empty;
+        }
+        out.push(cell);
       }
-      page.regions.push(cell);
     }
   }
+  page.regions = out;
   sortRegions(page);
-  return first;
+  return page;
 }
 
 /**
@@ -145,14 +135,55 @@ export function resize(page, rows, cols) {
 export function clearRegion(rg) {
   rg.card = null;
   rg.upload = null;
+  rg.slice = null;
   rg.empty = false;
 }
 
 /** Swap the contents of two regions, for dragging art around the page. */
 export function swapContents(a, b) {
-  const keep = { card: a.card, upload: a.upload, empty: a.empty, fit: a.fit };
-  a.card = b.card; a.upload = b.upload; a.empty = b.empty; a.fit = b.fit;
-  b.card = keep.card; b.upload = keep.upload; b.empty = keep.empty; b.fit = keep.fit;
+  const keep = {
+    card: a.card, upload: a.upload, slice: a.slice, empty: a.empty, fit: a.fit,
+  };
+  a.card = b.card; a.upload = b.upload; a.slice = b.slice;
+  a.empty = b.empty; a.fit = b.fit;
+  b.card = keep.card; b.upload = keep.upload; b.slice = keep.slice;
+  b.empty = keep.empty; b.fit = keep.fit;
+}
+
+/**
+ * Lay an insert across the block of pockets it was cropped for, one slice each.
+ *
+ * The block is anchored at (r0, c0) and pulled back if it would run off the
+ * page. Returns the pockets written to, or null when the page is too small.
+ */
+export function placeInsert(page, r0, c0, uploadId, cols, rows) {
+  if (cols > page.cols || rows > page.rows) return null;
+  const startC = Math.min(Math.max(0, c0), page.cols - cols);
+  const startR = Math.min(Math.max(0, r0), page.rows - rows);
+
+  const touched = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = regionAt(page, startR + r, startC + c);
+      if (!cell) continue;
+      cell.card = null;
+      cell.upload = uploadId;
+      // A single-pocket insert needs no slice; it simply fills its pocket.
+      cell.slice = cols > 1 || rows > 1 ? { cols, rows, c, r } : null;
+      cell.empty = false;
+      touched.push(cell);
+    }
+  }
+  return touched;
+}
+
+/** Every pocket showing the same insert as this one, itself included. */
+export function sliceSiblings(page, rg) {
+  if (!rg.upload || !rg.slice) return [rg];
+  return page.regions.filter(
+    (x) => x.upload === rg.upload && x.slice &&
+           x.slice.cols === rg.slice.cols && x.slice.rows === rg.slice.rows
+  );
 }
 
 export function filledCount(page) {

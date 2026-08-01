@@ -1,42 +1,54 @@
 // The print view.
 //
 // On screen the pockets sit apart so the page is easy to read. In print they
-// sit flush at exactly 63x88 mm with hairline cut guides, because a panel has
-// to stay continuous across the cards you cut out of it.
+// sit flush at exactly 63x88 mm, so the slices of an insert that covers several
+// pockets line back up into the whole picture before you cut them apart.
 
-import { CARD_W, CARD_H } from './editor.js';
+import { CARD_W, CARD_H, sliceStyle } from './editor.js';
 import { getCard, imageUrl, imageFallback, cardLabel } from './data.js';
 import * as inserts from './inserts.js';
-import { spanRows, spanCols } from './layout.js';
 
-// A4 minus a 10 mm margin each side, the usable area for one binder page.
-const SHEET_W = 190;
-const SHEET_H = 277;
+// A4 minus a 10 mm margin each side: the short edge gives 190 mm, the long 277.
+const A4_SHORT = 190;
+const A4_LONG = 277;
+
+const printable = (orientation) =>
+  orientation === 'landscape' ? { w: A4_LONG, h: A4_SHORT } : { w: A4_SHORT, h: A4_LONG };
 
 export function fitsOnA4(page) {
-  return page.cols * CARD_W <= SHEET_W && page.rows * CARD_H <= SHEET_H;
+  return page.cols * CARD_W <= A4_SHORT && page.rows * CARD_H <= A4_LONG;
 }
 
-/** How far a page has to shrink to sit on A4. 1 means it already fits. */
-export function scaleFor(page) {
-  return Math.min(1, SHEET_W / (page.cols * CARD_W), SHEET_H / (page.rows * CARD_H));
+/** The scale that fits a page inside a printable area. 1 means it fits true-size. */
+export function scaleFor(page, w = A4_SHORT, h = A4_LONG) {
+  return Math.min(1, w / (page.cols * CARD_W), h / (page.rows * CARD_H));
+}
+
+/** The sheet orientation that lets the biggest page print largest. */
+function bestOrientation(pages) {
+  let portrait = 1;
+  let landscape = 1;
+  for (const pg of pages) {
+    portrait = Math.min(portrait, scaleFor(pg, A4_SHORT, A4_LONG));
+    landscape = Math.min(landscape, scaleFor(pg, A4_LONG, A4_SHORT));
+  }
+  return landscape > portrait ? 'landscape' : 'portrait';
 }
 
 export function oversizeNote(page) {
   if (fitsOnA4(page)) return '';
   const w = (page.cols * CARD_W).toFixed(0);
   const h = (page.rows * CARD_H).toFixed(0);
-  const pct = Math.round(scaleFor(page) * 100);
-  return `A ${page.cols}×${page.rows} page is ${w}×${h} mm and will not fit A4 at true size. ` +
-         `Print it on A3, or choose "fit to page" to shrink it to ${pct}% — handy as a proof, ` +
-         `but do not cut cards from it.`;
+  return `A ${page.cols}×${page.rows} page is ${w}×${h} mm — larger than a card-size A4 sheet. ` +
+         `Printing shrinks it to fit so every pocket shows; print on A3 for cards at true size.`;
 }
 
-function drawPage(page, mode) {
+function drawPage(page, area) {
   const wrap = document.createElement('section');
   wrap.className = 'print-page';
 
-  const scale = mode === 'fit' ? scaleFor(page) : 1;
+  // Always scale to fit the sheet so nothing runs off the edge.
+  const scale = scaleFor(page, area.w, area.h);
   const grid = document.createElement('div');
   grid.className = 'print-grid';
   grid.style.width = `${page.cols * CARD_W * scale}mm`;
@@ -65,7 +77,13 @@ function drawPage(page, mode) {
       }
     }
 
-    if (src) {
+    if (src && rg.slice) {
+      // Pockets print flush, so the slices of one picture line back up into it.
+      const part = document.createElement('div');
+      part.className = 'print-slice';
+      Object.assign(part.style, sliceStyle(src, rg.slice));
+      cell.append(part);
+    } else if (src) {
       const img = document.createElement('img');
       img.src = src;
       img.alt = alt;
@@ -78,21 +96,6 @@ function drawPage(page, mode) {
       cell.append(img);
     }
 
-    // Cut guides inside a spanned region.
-    const rows = spanRows(rg);
-    const cols = spanCols(rg);
-    for (let i = 1; i < rows; i++) {
-      const line = document.createElement('i');
-      line.className = 'print-cut-h';
-      line.style.top = `${(i / rows) * 100}%`;
-      cell.append(line);
-    }
-    for (let i = 1; i < cols; i++) {
-      const line = document.createElement('i');
-      line.className = 'print-cut-v';
-      line.style.left = `${(i / cols) * 100}%`;
-      cell.append(line);
-    }
     grid.append(cell);
   }
 
@@ -105,9 +108,23 @@ function drawPage(page, mode) {
  * the browser's print dialogue. Images are given a moment to decode first, or
  * the sheet prints with gaps.
  */
-export async function printBinder(binder, mode, container) {
+export async function printBinder(binder, orientation, container) {
+  const orient = (orientation === 'portrait' || orientation === 'landscape')
+    ? orientation : bestOrientation(binder.pages);
+  const area = printable(orient);
+
+  // Point the sheet the right way for this run; the injected rule wins because
+  // it comes after the stylesheet in the cascade.
+  let sheet = document.getElementById('print-orientation');
+  if (!sheet) {
+    sheet = document.createElement('style');
+    sheet.id = 'print-orientation';
+    document.head.append(sheet);
+  }
+  sheet.textContent = `@media print { @page { size: A4 ${orient}; margin: 10mm; } }`;
+
   container.replaceChildren();
-  for (const page of binder.pages) container.append(drawPage(page, mode));
+  for (const page of binder.pages) container.append(drawPage(page, area));
 
   const images = [...container.querySelectorAll('img')];
   const settled = Promise.all(images.map((img) =>

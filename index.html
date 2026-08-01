@@ -29,9 +29,10 @@
     <button type="button" id="share" class="btn">Copy link</button>
     <button type="button" id="export" class="btn">Export</button>
     <button type="button" id="import" class="btn">Import</button>
-    <select id="printMode" class="btn select" aria-label="Print size">
-      <option value="true">True size</option>
-      <option value="fit">Fit to page</option>
+    <select id="printMode" class="btn select" aria-label="Print orientation" title="Sheet orientation">
+      <option value="auto">Auto fit</option>
+      <option value="portrait">Portrait</option>
+      <option value="landscape">Landscape</option>
     </select>
     <button type="button" id="print" class="btn primary">Print</button>
   </div>
@@ -75,8 +76,6 @@
 
       <div class="tool-group" role="group" aria-label="Selection">
         <span class="tool-label" id="selLabel">Nothing selected</span>
-        <button type="button" id="merge" class="btn" title="Join the selected pockets into one panel (M)">Merge</button>
-        <button type="button" id="split" class="btn" title="Break the panel back into pockets (S)">Split</button>
         <button type="button" id="fit" class="btn" title="Fill the panel, or show the whole card">Fit: fill</button>
         <button type="button" id="blank" class="btn" title="Mark as left blank on purpose (B)">Blank</button>
         <button type="button" id="clear" class="btn danger" title="Empty the selection (Delete)">Clear</button>
@@ -124,13 +123,14 @@
       <ul>
         <li>Search on the left, then click a card to drop it in the selected pocket, or drag it straight onto the page.</li>
         <li>Drag a card or insert to another pocket to swap them.</li>
-        <li>Click a pocket to select it. To pick a group, drag from an empty pocket across the others and let go — the selection only changes while you hold. To take in pockets that already have cards, click one and shift-click another. <b>Merge</b> turns the group into one panel and the artwork spreads across it. <b>Split</b> undoes that.</li>
+        <li>Click a pocket to select it. To pick a group, drag from an empty pocket across the others and let go — the selection only changes while you hold. To take in pockets that already have cards, click one and shift-click another.</li>
+        <li>Every pocket holds one card, always. An insert that covers several pockets is cut across them, a piece to each, exactly as you would sleeve it.</li>
         <li>Name a page in the <b>Name this page</b> box — the name shows above the page and in its chip's tooltip. Two pages side by side: <b>Spread view</b> shows a binder opening (pages 2 – 3, 4 – 5…). Drag the numbered page chips to reorder pages.</li>
         <li>Made a mistake? <b>Undo</b> and <b>Redo</b> step through every edit (<kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>).</li>
         <li><b>Combine →</b> lays the next page beside this one as one wide spread (say two 3×3 pages into a 6×3). It is wider than A4 — print on A3, or use "Fit to page".</li>
         <li><b>Blank</b> marks a pocket as left empty on purpose, which is part of the method rather than an oversight.</li>
         <li>Under <b>Your inserts</b>, drop an image, paste one, or drop it straight onto the page. Choose how many pockets it should fill, frame it, and it joins your library — then drag it onto a page like a card and it takes exactly that many pockets.</li>
-        <li>Shortcuts: <kbd>M</kbd> merge, <kbd>S</kbd> split, <kbd>B</kbd> blank, <kbd>Delete</kbd> clear, <kbd>Esc</kbd> deselect, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo, <kbd>←</kbd> <kbd>→</kbd> pages, <kbd>Ctrl</kbd>+<kbd>F</kbd> search.</li>
+        <li>Shortcuts: <kbd>B</kbd> blank, <kbd>Delete</kbd> clear, <kbd>Esc</kbd> deselect, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo, <kbd>←</kbd> <kbd>→</kbd> pages, <kbd>Ctrl</kbd>+<kbd>F</kbd> search.</li>
         <li>Everything saves in this browser as you go. <b>Export</b> writes a file you can keep or move; <b>Copy link</b> makes a link that carries the design, though not your uploads.</li>
         <li>Printing lays pockets flush at 63×88 mm with cut guides, so a panel stays continuous across the cards you cut.</li>
       </ul>
