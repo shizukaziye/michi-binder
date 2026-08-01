@@ -24,13 +24,31 @@ let insertPanel = null;
 
 const page = () => current.pages[pageIndex];
 
+/** A wide page (6x3 = two 3x3s) is worth two binder faces. */
+const isSpreadPage = (pg) => !!pg && pg.cols === 2 * pg.rows;
+
 /**
- * The two page indices a binder spread shows. Page 1 sits alone, then pages
- * pair up as a real binder does: (2,3), (4,5), ... A null slot is a blank face.
+ * Lay the pages into binder openings. Page 1 sits alone, like a real binder's
+ * first face; after that pages pair two to an opening — except a wide spread
+ * page fills a whole opening on its own. Returns an array of [idx] or [idx, idx].
  */
-function spreadPair(i) {
-  if (i <= 0) return [0, null];
-  return (i % 2 === 1) ? [i, i + 1] : [i - 1, i];
+function buildOpenings() {
+  const pages = current.pages;
+  const openings = [];
+  let i = 0;
+  if (pages.length) { openings.push([0]); i = 1; }
+  while (i < pages.length) {
+    if (isSpreadPage(pages[i])) { openings.push([i]); i += 1; }
+    else if (i + 1 < pages.length && !isSpreadPage(pages[i + 1])) { openings.push([i, i + 1]); i += 2; }
+    else { openings.push([i]); i += 1; }
+  }
+  return openings;
+}
+
+function openingOf(i) {
+  const openings = buildOpenings();
+  const idx = openings.findIndex((o) => o.includes(i));
+  return { openings, idx: idx < 0 ? 0 : idx };
 }
 
 // --- small helpers ---------------------------------------------------------
@@ -130,14 +148,15 @@ function refreshChrome() {
   $('#pageName').value = page().name || '';
   const total = current.pages.length;
   if (spread) {
-    const [l, r] = spreadPair(pageIndex);
-    const hasR = r != null && r < total;
-    const lo = (l ?? r) + 1;
-    const hi = (hasR ? r : l) + 1;
-    $('#pageLabel').textContent = lo === hi
-      ? `Page ${lo} of ${total}` : `Pages ${lo}–${hi} of ${total}`;
-    $('#prevPage').disabled = (l ?? r) === 0;
-    $('#nextPage').disabled = (hasR ? r : l) >= total - 1;
+    const { openings, idx } = openingOf(pageIndex);
+    const op = openings[idx];
+    const nums = op.map((x) => x + 1);
+    const wide = op.length === 1 && isSpreadPage(current.pages[op[0]]);
+    $('#pageLabel').textContent = op.length > 1
+      ? `Pages ${nums[0]}–${nums[1]} of ${total}`
+      : `Page ${nums[0]}${wide ? ' · spread' : ''} of ${total}`;
+    $('#prevPage').disabled = idx === 0;
+    $('#nextPage').disabled = idx >= openings.length - 1;
   } else {
     $('#pageLabel').textContent = `Page ${pageIndex + 1} of ${total}`;
     $('#prevPage').disabled = pageIndex === 0;
@@ -278,12 +297,13 @@ function goToPage(i) {
     editor = editorL;
     activeTag = 'L';
   } else {
-    const [l, r] = spreadPair(pageIndex);
-    const hasL = l != null && l < pages.length;
-    const hasR = r != null && r < pages.length;
-    editorL.setPage(hasL ? pages[l] : null);
-    editorR.setPage(hasR ? pages[r] : null);
-    $('#colR').hidden = !hasR;
+    const { openings, idx } = openingOf(pageIndex);
+    const op = openings[idx];
+    const l = op[0];
+    const r = op.length > 1 ? op[1] : null;
+    editorL.setPage(pages[l]);
+    editorR.setPage(r != null ? pages[r] : null);
+    $('#colR').hidden = r == null; // a lone or wide page fills the whole opening
     // Focus the side that actually holds the current page.
     activeTag = (pageIndex === r) ? 'R' : 'L';
     editor = activeTag === 'R' ? editorR : editorL;
@@ -336,9 +356,9 @@ function setSpread(on) {
 
 function stepPage(dir) {
   if (!spread) return goToPage(pageIndex + dir);
-  const [l, r] = spreadPair(pageIndex);
-  const edge = dir > 0 ? (r ?? l) : (l ?? r);
-  goToPage(edge + dir);
+  const { openings, idx } = openingOf(pageIndex);
+  const next = Math.max(0, Math.min(openings.length - 1, idx + dir));
+  goToPage(openings[next][0]);
 }
 
 function openBinder(binder) {
