@@ -97,9 +97,11 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) 
     if (rg.card) {
       const card = getCard(rg.card);
       if (!card) return null;
+      // Low res on screen — the pockets are small. Printing pulls the high-res
+      // scans separately, so a page full of cards stays light while you work.
       return {
-        src: imageUrl(card, 'high'),
-        fallback: imageFallback(card, 'high'),
+        src: imageUrl(card, 'low'),
+        fallback: imageFallback(card, 'low'),
         alt: cardLabel(card),
         title: `${cardLabel(card)}${card.a ? ` — art by ${card.a}` : ''}`,
       };
