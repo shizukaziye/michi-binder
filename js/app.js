@@ -3,7 +3,7 @@
 import * as data from './data.js';
 import * as store from './storage.js';
 import * as inserts from './inserts.js';
-import { makePage, resize, spanCols, spanRows, MIN_DIM, MAX_DIM } from './layout.js';
+import { makePage, resize, spanCols, spanRows, reseedIds, fillGaps, MIN_DIM, MAX_DIM } from './layout.js';
 import { mountSearch } from './search.js';
 import { mountEditor } from './editor.js';
 import { mountInserts } from './insertsPanel.js';
@@ -14,11 +14,24 @@ const $ = (sel) => document.querySelector(sel);
 let binders = [];
 let current = null;
 let pageIndex = 0;
-let editor = null;
+let editor = null;      // the active editor the toolbar acts on
+let editorL = null;     // left page
+let editorR = null;     // right page (spread view only)
+let spread = false;     // showing two facing pages
+let activeTag = 'L';
 let searchPanel = null;
 let insertPanel = null;
 
 const page = () => current.pages[pageIndex];
+
+/**
+ * The two page indices a binder spread shows. Page 1 sits alone, then pages
+ * pair up as a real binder does: (2,3), (4,5), ... A null slot is a blank face.
+ */
+function spreadPair(i) {
+  if (i <= 0) return [0, null];
+  return (i % 2 === 1) ? [i, i + 1] : [i - 1, i];
+}
 
 // --- small helpers ---------------------------------------------------------
 
@@ -43,8 +56,69 @@ function save() {
 }
 
 function onChange() {
+  recordHistory();
   save();
   refreshChrome();
+}
+
+// --- undo / redo -----------------------------------------------------------
+// History holds deep copies of the current binder's pages. `present` always
+// matches what is on screen; an edit pushes it onto `past` and takes a fresh
+// snapshot. Switching binders starts a fresh history.
+
+const HISTORY_LIMIT = 80;
+let past = [];
+let future = [];
+let present = null;
+
+const snapshot = () => structuredClone(current.pages);
+
+function resetHistory() {
+  past = [];
+  future = [];
+  present = snapshot();
+  refreshUndoButtons();
+}
+
+function recordHistory() {
+  if (present) {
+    past.push(present);
+    if (past.length > HISTORY_LIMIT) past.shift();
+  }
+  future = [];
+  present = snapshot();
+  refreshUndoButtons();
+}
+
+function restore(pages) {
+  current.pages = structuredClone(pages);
+  reseedIds(current.pages);
+  pageIndex = Math.max(0, Math.min(current.pages.length - 1, pageIndex));
+  goToPage(pageIndex);
+  save();
+}
+
+function undo() {
+  if (!past.length) return;
+  future.unshift(present);
+  present = past.pop();
+  restore(present);
+  refreshUndoButtons();
+}
+
+function redo() {
+  if (!future.length) return;
+  past.push(present);
+  present = future.shift();
+  restore(present);
+  refreshUndoButtons();
+}
+
+function refreshUndoButtons() {
+  const u = $('#undo');
+  const r = $('#redo');
+  if (u) u.disabled = past.length === 0;
+  if (r) r.disabled = future.length === 0;
 }
 
 // --- rendering the surrounding controls ------------------------------------
@@ -53,10 +127,23 @@ function refreshChrome() {
   const pg = page();
 
   $('#binderName').value = current.name;
-  $('#pageLabel').textContent = `Page ${pageIndex + 1} of ${current.pages.length}`;
-  $('#prevPage').disabled = pageIndex === 0;
-  $('#nextPage').disabled = pageIndex >= current.pages.length - 1;
-  $('#deletePage').disabled = current.pages.length <= 1;
+  const total = current.pages.length;
+  if (spread) {
+    const [l, r] = spreadPair(pageIndex);
+    const hasR = r != null && r < total;
+    const lo = (l ?? r) + 1;
+    const hi = (hasR ? r : l) + 1;
+    $('#pageLabel').textContent = lo === hi
+      ? `Page ${lo} of ${total}` : `Pages ${lo}–${hi} of ${total}`;
+    $('#prevPage').disabled = (l ?? r) === 0;
+    $('#nextPage').disabled = (hasR ? r : l) >= total - 1;
+  } else {
+    $('#pageLabel').textContent = `Page ${pageIndex + 1} of ${total}`;
+    $('#prevPage').disabled = pageIndex === 0;
+    $('#nextPage').disabled = pageIndex >= total - 1;
+  }
+  $('#deletePage').disabled = total <= 1;
+  $('#combineNext').disabled = pageIndex >= total - 1;
 
   $('#rows').value = pg.rows;
   $('#cols').value = pg.cols;
@@ -98,11 +185,44 @@ function renderPageStrip() {
     b.type = 'button';
     b.className = 'page-pip';
     b.textContent = String(i + 1);
-    b.title = `Page ${i + 1} — ${pg.cols}×${pg.rows}`;
+    b.title = `Page ${i + 1} — ${pg.cols}×${pg.rows} · drag to reorder`;
     b.setAttribute('aria-pressed', String(i === pageIndex));
+    b.draggable = true;
     b.addEventListener('click', () => goToPage(i));
+    b.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/michi-page', String(i));
+      e.dataTransfer.effectAllowed = 'move';
+      b.classList.add('dragging');
+    });
+    b.addEventListener('dragend', () => b.classList.remove('dragging'));
+    b.addEventListener('dragover', (e) => {
+      if (![...e.dataTransfer.types].includes('text/michi-page')) return;
+      e.preventDefault();
+      b.classList.add('drop-into');
+    });
+    b.addEventListener('dragleave', () => b.classList.remove('drop-into'));
+    b.addEventListener('drop', (e) => {
+      e.preventDefault();
+      b.classList.remove('drop-into');
+      const from = Number(e.dataTransfer.getData('text/michi-page'));
+      if (Number.isInteger(from)) movePage(from, i);
+    });
     strip.append(b);
   });
+}
+
+/** Move a page to a new slot, keeping the same page in view. */
+function movePage(from, to) {
+  const pages = current.pages;
+  if (from === to || from < 0 || from >= pages.length || to < 0 || to >= pages.length) return;
+  const staying = pages[pageIndex];
+  const moved = pages.splice(from, 1)[0];
+  pages.splice(to, 0, moved);
+  pageIndex = pages.indexOf(staying);
+  recordHistory();
+  save();
+  goToPage(pageIndex);
+  toast(`Moved page to slot ${to + 1}.`);
 }
 
 function onSelect({ regions, single, canMerge, canSplit }) {
@@ -137,16 +257,115 @@ function onSelect({ regions, single, canMerge, canSplit }) {
 
 function goToPage(i) {
   pageIndex = Math.max(0, Math.min(current.pages.length - 1, i));
-  editor.setPage(page());
+  const pages = current.pages;
+
+  if (!spread) {
+    editorL.setPage(page());
+    editorR.setPage(null);
+    $('#canvasL').hidden = false;
+    $('#canvasR').hidden = true;
+    editor = editorL;
+    activeTag = 'L';
+  } else {
+    const [l, r] = spreadPair(pageIndex);
+    const hasL = l != null && l < pages.length;
+    const hasR = r != null && r < pages.length;
+    editorL.setPage(hasL ? pages[l] : null);
+    editorR.setPage(hasR ? pages[r] : null);
+    $('#canvasL').hidden = !hasL;
+    $('#canvasR').hidden = !hasR;
+    // Focus the side that actually holds the current page.
+    activeTag = (pageIndex === r) ? 'R' : 'L';
+    editor = activeTag === 'R' ? editorR : editorL;
+  }
+  markActive();
   refreshChrome();
+}
+
+/**
+ * Switch which page the toolbar and shortcuts act on (spread view). Called from
+ * the canvas pointerdown, so it must not re-render that editor mid-press — the
+ * region's own pointerdown updates the toolbar a moment later.
+ */
+function setActiveTag(tag) {
+  if (!spread) { activeTag = 'L'; editor = editorL; return; }
+  const ed = tag === 'R' ? editorR : editorL;
+  if (!ed.getPage()) return; // ignore a blank face
+  activeTag = tag;
+  editor = ed;
+  pageIndex = current.pages.indexOf(ed.getPage());
+  markActive();
+  refreshChrome();
+}
+
+function markActive() {
+  $('#canvasL').classList.toggle('active-canvas', spread && activeTag === 'L');
+  $('#canvasR').classList.toggle('active-canvas', spread && activeTag === 'R');
+}
+
+function setSpread(on) {
+  spread = on;
+  $('#spreadToggle').setAttribute('aria-pressed', String(on));
+  $('#spreadToggle').textContent = on ? 'Single page' : 'Spread view';
+  goToPage(pageIndex);
+}
+
+function stepPage(dir) {
+  if (!spread) return goToPage(pageIndex + dir);
+  const [l, r] = spreadPair(pageIndex);
+  const edge = dir > 0 ? (r ?? l) : (l ?? r);
+  goToPage(edge + dir);
 }
 
 function openBinder(binder) {
   current = binder;
   pageIndex = 0;
-  editor.setPage(page());
-  refreshChrome();
+  goToPage(0);
+  resetHistory();
   store.saveCurrentId(binder.id);
+}
+
+/** Lay the next page beside this one, making one wider spread page. */
+function combineWithNext() {
+  if (pageIndex >= current.pages.length - 1) {
+    toast('Move to a page that has another page after it, then combine.', 'error');
+    return;
+  }
+  const a = page();
+  const b = current.pages[pageIndex + 1];
+  const rows = Math.max(a.rows, b.rows);
+  const cols = a.cols + b.cols;
+  if (cols > MAX_DIM || rows > MAX_DIM) {
+    toast(
+      `That would make a ${cols}×${rows} page, past the ${MAX_DIM}×${MAX_DIM} limit. ` +
+      'Shrink one of the pages first.', 'error');
+    return;
+  }
+
+  let n = 0;
+  const lift = (rg, dc) => {
+    const copy = structuredClone(rg);
+    copy.id = `k${n++}`;
+    copy.c0 += dc;
+    copy.c1 += dc;
+    return copy;
+  };
+  const merged = {
+    rows,
+    cols,
+    regions: [
+      ...a.regions.map((rg) => lift(rg, 0)),
+      ...b.regions.map((rg) => lift(rg, a.cols)),
+    ],
+  };
+  fillGaps(merged); // cover any pockets a row-count mismatch left open
+
+  current.pages.splice(pageIndex, 2, merged);
+  reseedIds(current.pages);
+  recordHistory();
+  save();
+  goToPage(pageIndex);
+  toast('Pages combined into a spread. Wider than A4 — print on A3 or use "Fit to page".');
 }
 
 function addBinder(binder, message) {
@@ -178,16 +397,23 @@ function selectionSize() {
 }
 
 async function boot() {
-  editor = mountEditor($('#canvas'), {
+  const handlers = (tag) => ({
     onChange,
-    onSelect,
+    // Only the active page drives the toolbar.
+    onSelect: (sel) => { if (activeTag === tag) onSelect(sel); },
     onNotice: toast,
     // A picture dropped straight onto the page goes through the cropper first.
     onFileDrop: (files, where) => {
+      setActiveTag(tag);
       showTab('inserts');
       insertPanel.intake(files, where);
     },
   });
+  editorL = mountEditor($('#canvasL'), handlers('L'));
+  editorR = mountEditor($('#canvasR'), handlers('R'));
+  editor = editorL;
+  $('#canvasL').addEventListener('pointerdown', () => setActiveTag('L'), true);
+  $('#canvasR').addEventListener('pointerdown', () => setActiveTag('R'), true);
   searchPanel = mountSearch($('#searchPanel'), {
     onPick: (cardId) => editor.assignCard(cardId),
   });
@@ -209,8 +435,8 @@ async function boot() {
   const savedId = store.loadCurrentId();
   current = binders.find((b) => b.id === savedId) || binders[0];
   pageIndex = 0;
-  editor.setPage(page());
-  refreshChrome();
+  goToPage(0);
+  resetHistory();
 
   wireControls();
 
@@ -240,6 +466,8 @@ async function boot() {
 }
 
 function wireControls() {
+  $('#undo').addEventListener('click', undo);
+  $('#redo').addEventListener('click', redo);
   $('#merge').addEventListener('click', () => editor.merge());
   $('#split').addEventListener('click', () => editor.split());
   $('#clear').addEventListener('click', () => editor.clearSelected());
@@ -270,11 +498,13 @@ function wireControls() {
   $('#cols').addEventListener('change', () => applySize(page().rows, +$('#cols').value));
 
   // Pages
-  $('#prevPage').addEventListener('click', () => goToPage(pageIndex - 1));
-  $('#nextPage').addEventListener('click', () => goToPage(pageIndex + 1));
+  $('#prevPage').addEventListener('click', () => stepPage(-1));
+  $('#nextPage').addEventListener('click', () => stepPage(1));
+  $('#spreadToggle').addEventListener('click', () => setSpread(!spread));
   $('#addPage').addEventListener('click', () => {
     const pg = page();
     current.pages.splice(pageIndex + 1, 0, makePage(pg.rows, pg.cols));
+    recordHistory();
     save();
     goToPage(pageIndex + 1);
   });
@@ -282,14 +512,17 @@ function wireControls() {
     const copy = structuredClone(page());
     copy.regions.forEach((rg, i) => { rg.id = `d${Date.now()}_${i}`; });
     current.pages.splice(pageIndex + 1, 0, copy);
+    recordHistory();
     save();
     goToPage(pageIndex + 1);
     toast('Page duplicated.');
   });
+  $('#combineNext').addEventListener('click', combineWithNext);
   $('#deletePage').addEventListener('click', () => {
     if (current.pages.length <= 1) return;
-    if (!confirm(`Delete page ${pageIndex + 1}? This cannot be undone.`)) return;
+    if (!confirm(`Delete page ${pageIndex + 1}? You can undo this.`)) return;
     current.pages.splice(pageIndex, 1);
+    recordHistory();
     save();
     goToPage(Math.min(pageIndex, current.pages.length - 1));
   });
@@ -371,6 +604,12 @@ function wireControls() {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
       e.preventDefault(); searchPanel.focus(); return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault(); e.shiftKey ? redo() : undo(); return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      e.preventDefault(); redo(); return;
+    }
     switch (e.key) {
       case 'm': editor.merge(); break;
       case 's': editor.split(); break;
@@ -378,8 +617,8 @@ function wireControls() {
       case 'Delete': case 'Backspace': e.preventDefault(); editor.clearSelected(); break;
       case 'Escape': editor.clearSelection(); break;
       case 'a': if (e.ctrlKey || e.metaKey) { e.preventDefault(); editor.selectAll(); } break;
-      case 'ArrowLeft': if (pageIndex > 0) goToPage(pageIndex - 1); break;
-      case 'ArrowRight': if (pageIndex < current.pages.length - 1) goToPage(pageIndex + 1); break;
+      case 'ArrowLeft': stepPage(-1); break;
+      case 'ArrowRight': stepPage(1); break;
     }
   });
 }
@@ -406,7 +645,7 @@ function applySize(rows, cols) {
     return;
   }
   resize(pg, rows, cols);
-  editor.setPage(pg);
+  goToPage(pageIndex);
   onChange();
 }
 

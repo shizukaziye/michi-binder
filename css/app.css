@@ -245,8 +245,11 @@ select.chip { border-radius: 999px; max-width: 190px; }
 
 /* --- the page ------------------------------------------------------------- */
 
-.canvas-wrap { display: flex; justify-content: center; }
+.canvas-wrap { display: flex; justify-content: center; gap: 22px; align-items: flex-start; }
 .canvas { width: 100%; }
+/* Spread view: two facing pages share the row. */
+.canvas-wrap:has(#canvasR:not([hidden])) .canvas { flex: 1 1 0; min-width: 0; }
+.canvas.active-canvas .page-grid { outline: 2px solid var(--accent); outline-offset: 4px; }
 .page-grid {
   display: grid;
   grid-template-columns: repeat(var(--cols, 3), 1fr);
@@ -270,10 +273,13 @@ select.chip { border-radius: 999px; max-width: 190px; }
   background: var(--bg-3);
   border: 1px dashed #4a4360;
   overflow: hidden;
-  cursor: pointer;
+  cursor: cell; /* drag from here to sweep a selection */
   min-width: 0; min-height: 0;
 }
+/* A card can be dragged to move it (grab); hold then drag to select instead. */
 .region.filled { border-style: solid; border-color: transparent; cursor: grab; background: #0d0c12; }
+.region.filled:active { cursor: grabbing; }
+.region.source { opacity: .4; }
 .region.dragging { opacity: .35; }
 .region.selected { border-color: var(--accent); border-style: solid; box-shadow: 0 0 0 2px rgba(228,87,127,.45); }
 .region.drop-target { border-color: var(--accent-soft); border-style: solid; background: #3a2733; }
@@ -281,7 +287,7 @@ select.chip { border-radius: 999px; max-width: 190px; }
   background: repeating-linear-gradient(45deg, var(--bg-3), var(--bg-3) 7px, #2f2b3d 7px, #2f2b3d 14px);
   border-style: solid; border-color: #574f70;
 }
-.region-img { width: 100%; height: 100%; display: block; }
+.region-img { width: 100%; height: 100%; display: block; -webkit-user-drag: none; user-select: none; pointer-events: none; }
 .fit-cover .region-img { object-fit: cover; }
 .fit-contain .region-img { object-fit: contain; }
 .region-note {
@@ -312,6 +318,9 @@ select.chip { border-radius: 999px; max-width: 190px; }
   color: var(--dim); font-size: 12px; cursor: pointer;
 }
 .page-pip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.page-pip { cursor: grab; }
+.page-pip.dragging { opacity: .4; cursor: grabbing; }
+.page-pip.drop-into { border-color: var(--accent-soft); box-shadow: 0 0 0 2px rgba(228,87,127,.4); }
 
 /* --- help and footer ------------------------------------------------------ */
 

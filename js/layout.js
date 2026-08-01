@@ -6,7 +6,8 @@
 // makes a Michi panel: one picture spread over several pockets.
 
 export const MIN_DIM = 1;
-export const MAX_DIM = 4;
+// Up to 6 so two pages can combine into a spread (e.g. 3x3 + 3x3 = 3x6).
+export const MAX_DIM = 6;
 
 let nextId = 1;
 const newId = () => `r${nextId++}`;
@@ -61,7 +62,7 @@ const overlaps = (rg, rect) =>
  * Fill any pocket left without a region. Merging drops whole regions that
  * straddle the selection, which can leave holes outside it; those become 1x1s.
  */
-function fillGaps(page) {
+export function fillGaps(page) {
   for (let r = 0; r < page.rows; r++) {
     for (let c = 0; c < page.cols; c++) {
       if (!regionAt(page, r, c)) page.regions.push(makeRegion(r, c, r, c));

@@ -51,19 +51,25 @@
 
   <section class="workspace">
     <div class="toolbar">
+      <div class="tool-group" role="group" aria-label="History">
+        <button type="button" id="undo" class="btn" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+        <button type="button" id="redo" class="btn" title="Redo (Ctrl+Shift+Z)" disabled>↷ Redo</button>
+      </div>
+
       <div class="tool-group" role="group" aria-label="Page size">
         <span class="tool-label">Page</span>
         <button type="button" class="btn preset" data-size="2x2">2×2</button>
         <button type="button" class="btn preset" data-size="3x3">3×3</button>
         <button type="button" class="btn preset" data-size="4x4">4×4</button>
+        <button type="button" class="btn preset" data-size="3x6" title="Two-page spread (6 wide, 3 tall)">6×3 spread</button>
         <label class="sr-only" for="cols">Columns</label>
         <select id="cols" class="btn select tiny" title="Columns">
-          <option>1</option><option>2</option><option>3</option><option>4</option>
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
         </select>
         <span class="times">×</span>
         <label class="sr-only" for="rows">Rows</label>
         <select id="rows" class="btn select tiny" title="Rows">
-          <option>1</option><option>2</option><option>3</option><option>4</option>
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
         </select>
       </div>
 
@@ -80,16 +86,20 @@
     <p class="size-note" id="sizeNote" hidden></p>
 
     <div class="canvas-wrap">
-      <div id="canvas" class="canvas"></div>
+      <div id="canvasL" class="canvas"></div>
+      <div id="canvasR" class="canvas" hidden></div>
     </div>
 
     <div class="page-nav">
       <button type="button" id="prevPage" class="btn" title="Previous page (←)">‹</button>
       <span class="page-label" id="pageLabel">Page 1 of 1</span>
       <button type="button" id="nextPage" class="btn" title="Next page (→)">›</button>
+      <button type="button" id="spreadToggle" class="btn" aria-pressed="false"
+              title="Show two facing pages, like an open binder">Spread view</button>
       <div class="page-strip" id="pageStrip" aria-label="Pages"></div>
       <button type="button" id="addPage" class="btn">Add page</button>
       <button type="button" id="duplicatePage" class="btn">Duplicate</button>
+      <button type="button" id="combineNext" class="btn" title="Lay the next page beside this one as one spread">Combine →</button>
       <button type="button" id="deletePage" class="btn danger">Delete page</button>
     </div>
 
@@ -97,11 +107,14 @@
       <summary>How to use it</summary>
       <ul>
         <li>Search on the left, then click a card to drop it in the selected pocket, or drag it straight onto the page.</li>
-        <li>Click a pocket, then shift-click another to select a rectangle. <b>Merge</b> turns it into one panel and the artwork spreads across it. <b>Split</b> undoes that.</li>
-        <li>Drag a card between pockets to swap them.</li>
+        <li>Drag a card or insert to another pocket to swap them.</li>
+        <li>Click a pocket to select it. To pick a group, drag from an empty pocket across the others and let go — the selection only changes while you hold. To take in pockets that already have cards, click one and shift-click another. <b>Merge</b> turns the group into one panel and the artwork spreads across it. <b>Split</b> undoes that.</li>
+        <li>Two pages side by side: <b>Spread view</b> shows a binder opening (pages 2 – 3, 4 – 5…). Drag the numbered page chips to reorder pages.</li>
+        <li>Made a mistake? <b>Undo</b> and <b>Redo</b> step through every edit (<kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>).</li>
+        <li><b>Combine →</b> lays the next page beside this one as one wide spread (say two 3×3 pages into a 6×3). It is wider than A4 — print on A3, or use "Fit to page".</li>
         <li><b>Blank</b> marks a pocket as left empty on purpose, which is part of the method rather than an oversight.</li>
         <li>Under <b>Your inserts</b>, drop an image, paste one, or drop it straight onto the page. Choose how many pockets it should fill, frame it, and it joins your library — then drag it onto a page like a card and it takes exactly that many pockets.</li>
-        <li>Shortcuts: <kbd>M</kbd> merge, <kbd>S</kbd> split, <kbd>B</kbd> blank, <kbd>Delete</kbd> clear, <kbd>Esc</kbd> deselect, <kbd>←</kbd> <kbd>→</kbd> pages, <kbd>Ctrl</kbd>+<kbd>F</kbd> search.</li>
+        <li>Shortcuts: <kbd>M</kbd> merge, <kbd>S</kbd> split, <kbd>B</kbd> blank, <kbd>Delete</kbd> clear, <kbd>Esc</kbd> deselect, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo, <kbd>←</kbd> <kbd>→</kbd> pages, <kbd>Ctrl</kbd>+<kbd>F</kbd> search.</li>
         <li>Everything saves in this browser as you go. <b>Export</b> writes a file you can keep or move; <b>Copy link</b> makes a link that carries the design, though not your uploads.</li>
         <li>Printing lays pockets flush at 63×88 mm with cut guides, so a panel stays continuous across the cards you cut.</li>
       </ul>

@@ -19,9 +19,17 @@ function boundary(i, n) {
 
 export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) {
   let page = null;
-  let anchor = null;   // region the selection started from
-  let focus = null;    // region the selection currently reaches
-  let dragging = false;
+  let anchor = null;     // region the selection started from
+  let focus = null;      // region the selection currently reaches
+  let down = false;      // the mouse button is held down on this page
+  // What the current press is doing: 'select' sweeps a selection (started on an
+  // empty pocket), 'pending-move'/'move' relocates a card (started on a filled
+  // one). Selection only ever changes while `down` is true.
+  let kind = null;
+  let start = null;      // { rg, x, y } of the press
+  let dropTargetEl = null;
+
+  const MOVE_THRESHOLD = 6; // px of travel before a press counts as a drag
 
   const grid = document.createElement('div');
   grid.className = 'page-grid';
@@ -119,6 +127,9 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) 
       img.src = art.src;
       img.alt = art.alt;
       img.decoding = 'async';
+      // Stop the browser's own image drag: it would hijack our pointer gesture
+      // and drop the picture back through the file cropper as a re-upload.
+      img.draggable = false;
       if (art.title) img.title = art.title;
       if (art.fallback) {
         img.addEventListener('error', () => {
@@ -126,7 +137,8 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) 
         });
       }
       el.append(img);
-      el.draggable = true;
+      // Regions are never natively draggable: moving a card is a pointer gesture
+      // (a quick drag), so a press-and-hold can rubber-band a selection instead.
     } else if (rg.empty) {
       const note = document.createElement('span');
       note.className = 'region-note';
@@ -163,39 +175,48 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) 
     return el;
   }
 
+  const regionEl = (id) => grid.querySelector(`.region[data-id="${id}"]`);
+
+  function setDropTarget(el) {
+    const next = el && !el.classList.contains('source') ? el : null;
+    if (next === dropTargetEl) return;
+    dropTargetEl?.classList.remove('drop-target');
+    dropTargetEl = next;
+    dropTargetEl?.classList.add('drop-target');
+  }
+
+  function endGesture() {
+    if (start) regionEl(start.rg.id)?.classList.remove('source');
+    setDropTarget(null);
+    down = false;
+    kind = null;
+    start = null;
+  }
+
   function wireRegion(el, rg) {
     el.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
-      if (e.shiftKey && anchor) {
-        focus = rg;
-        render();
-        return;
-      }
-      // A filled region starts an art drag instead of a rubber-band select.
-      // Do not capture the pointer here: capture would send every later event
-      // to this one element, and the sweep needs pointerenter on its neighbours.
-      if (!el.draggable) dragging = true;
+      if (e.shiftKey && anchor) { focus = rg; render(); return; }
+      // Press selects this one pocket. Then, while the button stays down, a drag
+      // from an EMPTY pocket sweeps a selection; a drag from a FILLED one moves
+      // the card. Release ends it — selection never changes with the button up.
+      // No pointer capture: the sweep needs pointerenter on the neighbours.
       anchor = rg;
       focus = rg;
+      down = true;
+      kind = artOf(rg) ? 'pending-move' : 'select';
+      start = { rg, x: e.clientX, y: e.clientY };
       render();
     });
 
     el.addEventListener('pointerenter', () => {
-      if (!dragging) return;
-      focus = rg;
-      render();
+      // Extend the selection only while sweeping with the button held.
+      if (down && kind === 'select') { focus = rg; render(); }
     });
-
-    el.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/michi-region', rg.id);
-      e.dataTransfer.effectAllowed = 'move';
-      el.classList.add('dragging');
-    });
-    el.addEventListener('dragend', () => el.classList.remove('dragging'));
 
     el.addEventListener('dragover', (e) => {
       const types = [...e.dataTransfer.types];
-      const wanted = ['text/michi-card', 'text/michi-region', 'text/michi-insert', 'Files'];
+      const wanted = ['text/michi-card', 'text/michi-insert', 'Files'];
       if (wanted.some((t) => types.includes(t))) {
         e.preventDefault();
         el.classList.add('drop-target');
@@ -206,7 +227,6 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) 
       e.preventDefault();
       el.classList.remove('drop-target');
       const cardId = e.dataTransfer.getData('text/michi-card');
-      const fromId = e.dataTransfer.getData('text/michi-region');
       const insertId = e.dataTransfer.getData('text/michi-insert');
       const files = [...(e.dataTransfer.files || [])];
 
@@ -224,9 +244,6 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) 
         rg.card = cardId;
         rg.upload = null;
         rg.empty = false;
-      } else if (fromId && fromId !== rg.id) {
-        const from = L.findRegion(page, fromId);
-        if (from) L.swapContents(from, rg);
       } else {
         return;
       }
@@ -300,7 +317,52 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) 
     onChange();
   }
 
-  window.addEventListener('pointerup', () => { dragging = false; });
+  window.addEventListener('pointermove', (e) => {
+    if (!down || !start) return;
+    // A press on a card becomes a move once it travels past the threshold.
+    if (kind === 'pending-move') {
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) <= MOVE_THRESHOLD) return;
+      kind = 'move';
+      anchor = start.rg; focus = start.rg; // a move keeps just the source selected
+      regionEl(start.rg.id)?.classList.add('source');
+      render();
+    }
+    if (kind === 'move') {
+      const over = document.elementFromPoint(e.clientX, e.clientY);
+      setDropTarget(over && over.closest('.region'));
+    }
+  });
+
+  window.addEventListener('pointerup', (e) => {
+    if (!down) return;
+    if (kind === 'move') {
+      const over = document.elementFromPoint(e.clientX, e.clientY);
+      const targetId = over?.closest('.region')?.dataset.id;
+      const from = L.findRegion(page, start.rg.id);
+      const to = targetId ? L.findRegion(page, targetId) : null;
+      endGesture();
+      if (from && to && to.id !== from.id) {
+        L.swapContents(from, to);
+        anchor = to; focus = to;
+        commit();
+      } else {
+        render();
+      }
+      return;
+    }
+    // A click or a finished sweep: just stop. The selection stays as it is.
+    endGesture();
+    render();
+  });
+
+  // If the OS or browser cancels the pointer (native drag, gesture steal), drop
+  // the half-finished gesture so it never keeps tracking the loose mouse.
+  window.addEventListener('pointercancel', () => { endGesture(); render(); });
+  // Belt and braces: never let a native drag begin from inside the page grid.
+  grid.addEventListener('dragstart', (e) => {
+    if (e.target.closest('.region')) e.preventDefault();
+  });
+
   new ResizeObserver(sizeRows).observe(grid);
   // The observer covers layout changes around the grid; the window event covers
   // the viewport height, which the grid's own width cap depends on.
