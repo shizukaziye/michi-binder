@@ -369,7 +369,12 @@ function moveCard(fromId, toId) {
   swapContents(from.region, to.region);
   recordHistory();
   save();
-  if (from.editor !== to.editor) from.editor.clearSelection();
+  if (from.editor !== to.editor) {
+    from.editor.clearSelection();
+    // Deselecting only repaints outlines. The page the card left has to redraw
+    // properly or it goes on showing a card that is no longer there.
+    from.editor.render();
+  }
   activeTag = to.editor === editorR ? 'R' : 'L';
   editor = to.editor;
   to.editor.selectRegion(to.region.id);
