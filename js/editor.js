@@ -17,7 +17,7 @@ function boundary(i, n) {
          ` + ${i - 1} * var(--gap) + var(--gap) / 2)`;
 }
 
-export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) {
+export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, onMove }) {
   let page = null;
   let anchor = null;     // region the selection started from
   let focus = null;      // region the selection currently reaches
@@ -340,16 +340,12 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) 
     if (kind === 'move') {
       const over = document.elementFromPoint(e.clientX, e.clientY);
       const targetId = over?.closest('.region')?.dataset.id;
-      const from = L.findRegion(page, start.rg.id);
-      const to = targetId ? L.findRegion(page, targetId) : null;
+      const fromId = start.rg.id;
       endGesture();
-      if (from && to && to.id !== from.id) {
-        L.swapContents(from, to);
-        anchor = to; focus = to;
-        commit();
-      } else {
-        render();
-      }
+      // The target may sit on the other page of a spread, so the app resolves
+      // both ends and performs the swap; here we just report the two pockets.
+      if (targetId && targetId !== fromId && onMove) onMove(fromId, targetId);
+      else render();
       return;
     }
     // A click or a finished sweep: just stop. The selection stays as it is.
@@ -380,6 +376,12 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop }) 
     getPage: () => page,
     render,
     selection: () => ({ rect: rect(), regions: selectedRegions() }),
+    /** Select a region on this page by id (used after a cross-page move). */
+    selectRegion(id) {
+      const rg = L.findRegion(page, id);
+      anchor = rg; focus = rg;
+      render();
+    },
 
     merge() {
       const rc = rect();

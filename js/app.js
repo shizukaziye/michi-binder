@@ -3,7 +3,7 @@
 import * as data from './data.js';
 import * as store from './storage.js';
 import * as inserts from './inserts.js';
-import { makePage, resize, spanCols, spanRows, reseedIds, fillGaps, MIN_DIM, MAX_DIM } from './layout.js';
+import { makePage, resize, spanCols, spanRows, reseedIds, fillGaps, swapContents, MIN_DIM, MAX_DIM } from './layout.js';
 import { mountSearch } from './search.js';
 import { mountEditor } from './editor.js';
 import { mountInserts } from './insertsPanel.js';
@@ -347,6 +347,36 @@ function markActive() {
   $('#canvasR').classList.toggle('active-canvas', spread && activeTag === 'R');
 }
 
+/** Find a pocket by id across whichever pages are on screen (both, in spread). */
+function findRegionAnywhere(id) {
+  for (const ed of [editorL, editorR]) {
+    const pg = ed?.getPage();
+    const region = pg && pg.regions.find((r) => r.id === id);
+    if (region) return { editor: ed, region };
+  }
+  return null;
+}
+
+/**
+ * Move a card between pockets, even from one page of a spread to the other, so
+ * the two facing pages act as one surface. The app owns this because it is the
+ * only piece that knows about both editors at once.
+ */
+function moveCard(fromId, toId) {
+  const from = findRegionAnywhere(fromId);
+  const to = findRegionAnywhere(toId);
+  if (!from || !to || from.region.id === to.region.id) return;
+  swapContents(from.region, to.region);
+  recordHistory();
+  save();
+  if (from.editor !== to.editor) from.editor.clearSelection();
+  activeTag = to.editor === editorR ? 'R' : 'L';
+  editor = to.editor;
+  to.editor.selectRegion(to.region.id);
+  markActive();
+  refreshChrome();
+}
+
 function setSpread(on) {
   spread = on;
   $('#spreadToggle').setAttribute('aria-pressed', String(on));
@@ -448,6 +478,8 @@ async function boot() {
     // Only the active page drives the toolbar.
     onSelect: (sel) => { if (activeTag === tag) onSelect(sel); },
     onNotice: toast,
+    // Moves resolve across both pages, so a card can cross a spread.
+    onMove: moveCard,
     // A picture dropped straight onto the page goes through the cropper first.
     onFileDrop: (files, where) => {
       setActiveTag(tag);
