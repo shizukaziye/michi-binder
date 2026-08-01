@@ -127,6 +127,7 @@ function refreshChrome() {
   const pg = page();
 
   $('#binderName').value = current.name;
+  $('#pageName').value = page().name || '';
   const total = current.pages.length;
   if (spread) {
     const [l, r] = spreadPair(pageIndex);
@@ -185,7 +186,9 @@ function renderPageStrip() {
     b.type = 'button';
     b.className = 'page-pip';
     b.textContent = String(i + 1);
-    b.title = `Page ${i + 1} — ${pg.cols}×${pg.rows} · drag to reorder`;
+    const nm = (pg.name || '').trim();
+    b.title = `Page ${i + 1}${nm ? ` — ${nm}` : ''} · ${pg.cols}×${pg.rows} · drag to reorder`;
+    if (nm) b.classList.add('named');
     b.setAttribute('aria-pressed', String(i === pageIndex));
     b.draggable = true;
     b.addEventListener('click', () => goToPage(i));
@@ -262,8 +265,7 @@ function goToPage(i) {
   if (!spread) {
     editorL.setPage(page());
     editorR.setPage(null);
-    $('#canvasL').hidden = false;
-    $('#canvasR').hidden = true;
+    $('#colR').hidden = true;
     editor = editorL;
     activeTag = 'L';
   } else {
@@ -272,14 +274,27 @@ function goToPage(i) {
     const hasR = r != null && r < pages.length;
     editorL.setPage(hasL ? pages[l] : null);
     editorR.setPage(hasR ? pages[r] : null);
-    $('#canvasL').hidden = !hasL;
-    $('#canvasR').hidden = !hasR;
+    $('#colR').hidden = !hasR;
     // Focus the side that actually holds the current page.
     activeTag = (pageIndex === r) ? 'R' : 'L';
     editor = activeTag === 'R' ? editorR : editorL;
   }
   markActive();
+  updateCaptions();
   refreshChrome();
+}
+
+/** The "Page N · name" caption over a canvas. */
+function pageCaption(pg) {
+  if (!pg) return '';
+  const i = current.pages.indexOf(pg);
+  const name = (pg.name || '').trim();
+  return `Page ${i + 1}${name ? ` · ${name}` : ''}`;
+}
+
+function updateCaptions() {
+  $('#captionL').textContent = pageCaption(editorL.getPage());
+  $('#captionR').textContent = pageCaption(editorR.getPage());
 }
 
 /**
@@ -353,6 +368,7 @@ function combineWithNext() {
   const merged = {
     rows,
     cols,
+    name: a.name || b.name || '',
     regions: [
       ...a.regions.map((rg) => lift(rg, 0)),
       ...b.regions.map((rg) => lift(rg, a.cols)),
@@ -501,6 +517,12 @@ function wireControls() {
   $('#prevPage').addEventListener('click', () => stepPage(-1));
   $('#nextPage').addEventListener('click', () => stepPage(1));
   $('#spreadToggle').addEventListener('click', () => setSpread(!spread));
+  $('#pageName').addEventListener('input', (e) => {
+    page().name = e.target.value;
+    save();
+    renderPageStrip();
+    updateCaptions();
+  });
   $('#addPage').addEventListener('click', () => {
     const pg = page();
     current.pages.splice(pageIndex + 1, 0, makePage(pg.rows, pg.cols));

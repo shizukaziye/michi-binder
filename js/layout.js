@@ -24,7 +24,7 @@ export function makeRegion(r0, c0, r1, c1) {
 }
 
 export function makePage(rows = 3, cols = 3) {
-  const page = { rows, cols, regions: [] };
+  const page = { rows, cols, name: '', regions: [] };
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) page.regions.push(makeRegion(r, c, r, c));
   }

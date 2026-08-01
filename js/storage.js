@@ -138,6 +138,7 @@ function packBinder(binder) {
         FIT[rg.fit] ?? 0,
         rg.empty ? 1 : 0,
       ]),
+      pg.name || '',
     ]),
   };
 }
@@ -149,9 +150,10 @@ function unpackBinder(packed) {
     id: uid(),
     name: packed.n || 'Shared binder',
     updatedAt: Date.now(),
-    pages: packed.p.map(([rows, cols, regions]) => ({
+    pages: packed.p.map(([rows, cols, regions, name]) => ({
       rows,
       cols,
+      name: name || '',
       regions: regions.map(([r0, c0, r1, c1, card, fit, empty]) => ({
         id: `s${n++}`,
         r0, c0, r1, c1,
