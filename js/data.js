@@ -64,9 +64,20 @@ export async function load(base = '') {
 export const getCard = (id) => state.byId.get(id) || null;
 export const setNameOf = (card) => state.setName.get(card.s) || card.s;
 
-/** 'low' for thumbnails, 'high' for the page canvas and printing. */
-export const imageUrl = (card, quality = 'low') => `${card.u}/${quality}.webp`;
-export const imageFallback = (card, quality = 'low') => `${card.u}/${quality}.png`;
+/**
+ * 'low' for thumbnails, 'high' for the page canvas and printing.
+ *
+ * Cards carry a provider flag because the two sources shape their URLs
+ * differently: TCGdex appends /high.webp to a folder, while pokemontcg.io --
+ * which supplies the scans TCGdex lacks -- appends _hires.png to the card.
+ */
+export const imageUrl = (card, quality = 'low') =>
+  card.p === 'p'
+    ? `${card.u}${quality === 'high' ? '_hires' : ''}.png`
+    : `${card.u}/${quality}.webp`;
+
+export const imageFallback = (card, quality = 'low') =>
+  card.p === 'p' ? `${card.u}.png` : `${card.u}/${quality}.png`;
 
 export const cardLabel = (card) =>
   `${card.n} - ${setNameOf(card)} ${card.l}`;

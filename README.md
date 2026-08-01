@@ -44,8 +44,25 @@ python scripts/build_index.py
 
 The REST card dump carries no rarity or artist, and fetching 23,000 cards one
 at a time is not worth it, so the script sweeps the rarity list through the
-GraphQL endpoint instead — about 40 queries for the whole catalogue. Cards
-without artwork are dropped.
+GraphQL endpoint instead — about 40 queries for the whole catalogue.
+
+TCGdex knows about roughly 2,000 cards it holds no scan for, and they are not
+obscure ones: Shiny Vault, the Trainer and Galarian Galleries, and a lot of
+promos, which is exactly the artwork people build display pages from. The script
+fills those gaps twice over:
+
+1. Some are simply filed under a folder that is not the set id — gallery cards
+   sit under the parent set, dotted sets drop the dot. Those are rebuilt and
+   checked against the TCGdex CDN.
+2. The rest are borrowed from [pokemontcg.io](https://pokemontcg.io), matched by
+   set name, since the two number their cards the same way. Cards borrowed this
+   way carry a `p` flag, because that CDN shapes its URLs differently:
+   `_hires.png` on the card rather than `/high.webp` on a folder.
+
+Every borrowed URL is checked before it is kept, and a set is only worked
+through once a sample proves the numbering lines up. Cards neither source has a
+scan for are dropped — currently 869 of 23,505, almost all trainer kits, e-card
+variants, and sets too new to have been photographed.
 
 A GitHub Action reruns this every Monday and commits anything new.
 
