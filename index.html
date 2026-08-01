@@ -97,18 +97,21 @@
     </div>
 
     <div class="page-nav">
-      <button type="button" id="prevPage" class="btn" title="Previous page (←)">‹</button>
-      <span class="page-label" id="pageLabel">Page 1 of 1</span>
-      <button type="button" id="nextPage" class="btn" title="Next page (→)">›</button>
-      <label class="sr-only" for="pageName">Page name</label>
-      <input id="pageName" class="btn name-input" type="text" placeholder="Name this page" maxlength="40">
-      <button type="button" id="spreadToggle" class="btn" aria-pressed="false"
-              title="Show two facing pages, like an open binder">Spread view</button>
+      <div class="page-nav-row">
+        <button type="button" id="prevPage" class="btn" title="Previous page (←)">‹</button>
+        <span class="page-label" id="pageLabel">Page 1 of 1</span>
+        <button type="button" id="nextPage" class="btn" title="Next page (→)">›</button>
+        <label class="sr-only" for="pageName">Page name</label>
+        <input id="pageName" class="btn name-input" type="text" placeholder="Name this page" maxlength="40">
+        <button type="button" id="spreadToggle" class="btn" aria-pressed="false"
+                title="Show two facing pages, like an open binder">Spread view</button>
+        <span class="row-spacer"></span>
+        <button type="button" id="addPage" class="btn">Add page</button>
+        <button type="button" id="duplicatePage" class="btn">Duplicate</button>
+        <button type="button" id="combineNext" class="btn" title="Lay the next page beside this one as one spread">Combine →</button>
+        <button type="button" id="deletePage" class="btn danger">Delete page</button>
+      </div>
       <div class="page-strip" id="pageStrip" aria-label="Pages"></div>
-      <button type="button" id="addPage" class="btn">Add page</button>
-      <button type="button" id="duplicatePage" class="btn">Duplicate</button>
-      <button type="button" id="combineNext" class="btn" title="Lay the next page beside this one as one spread">Combine →</button>
-      <button type="button" id="deletePage" class="btn danger">Delete page</button>
     </div>
 
     <details class="help">

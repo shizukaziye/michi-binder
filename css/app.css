@@ -247,6 +247,7 @@ select.chip { border-radius: 999px; max-width: 190px; }
 
 .canvas-wrap { display: flex; justify-content: center; gap: 22px; align-items: flex-start; }
 .page-col { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; min-width: 0; }
+.page-col[hidden] { display: none; } /* a class display rule would otherwise beat [hidden] */
 .canvas { width: 100%; }
 .page-caption { font-size: 12.5px; color: var(--dim); text-align: center; min-height: 1.1em; text-wrap: balance; }
 /* Spread view: two facing pages share the row. */
@@ -311,21 +312,30 @@ select.chip { border-radius: 999px; max-width: 190px; }
 
 /* --- page navigation ------------------------------------------------------ */
 
-.page-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.page-nav { display: flex; flex-direction: column; gap: 10px; }
+.page-nav-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row-spacer { flex: 1 1 auto; }
 .page-label { font-size: 13px; color: var(--dim); min-width: 96px; }
-.page-strip { display: flex; gap: 4px; flex-wrap: wrap; margin-right: auto; }
+
+/* The page list: a readable vertical column, number + name, drag to reorder. */
+.page-strip { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
 .page-pip {
-  width: 28px; height: 28px; border-radius: 7px;
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 7px 12px; border-radius: 8px; text-align: left;
   background: var(--bg-3); border: 1px solid var(--line);
-  color: var(--dim); font-size: 12px; cursor: pointer;
+  color: var(--text); font-size: 13px; cursor: grab;
 }
 .page-pip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-.page-pip { cursor: grab; position: relative; }
-.page-pip.named::after {
-  content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
-  width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+.pip-num {
+  flex: 0 0 auto; min-width: 1.6em; text-align: center;
+  font-variant-numeric: tabular-nums; font-weight: 600; color: var(--dim);
 }
-.page-pip.named[aria-pressed="true"]::after { background: #fff; }
+.pip-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pip-name.unnamed { color: var(--dim); font-style: italic; }
+.pip-size { flex: 0 0 auto; font-size: 11.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.page-pip[aria-pressed="true"] .pip-num,
+.page-pip[aria-pressed="true"] .pip-size { color: rgba(255, 255, 255, .8); }
+.page-pip[aria-pressed="true"] .pip-name.unnamed { color: rgba(255, 255, 255, .7); }
 .page-pip.dragging { opacity: .4; cursor: grabbing; }
 .page-pip.drop-into { border-color: var(--accent-soft); box-shadow: 0 0 0 2px rgba(228,87,127,.4); }
 
