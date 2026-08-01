@@ -7,6 +7,7 @@ import { makePage, resize, reseedIds, fillGaps, swapContents, MIN_DIM, MAX_DIM }
 import { mountSearch } from './search.js';
 import { mountEditor } from './editor.js';
 import { mountInserts } from './insertsPanel.js';
+import { askImport } from './importDialog.js';
 import { printBinder, oversizeNote, fitsOnA4 } from './print.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -651,9 +652,35 @@ function wireControls() {
     e.target.value = '';
     if (!file) return;
     try {
-      const binder = await store.importBinder(await file.text());
+      // Read the file first: the choice is easier to make knowing what is in it.
+      const incoming = await store.importBinder(await file.text());
       insertPanel.render();
-      addBinder(binder, 'Binder imported.');
+
+      const choice = await askImport({
+        name: incoming.name,
+        pageCount: incoming.pages.length,
+        binders: [...binders].sort((a, z) => z.updatedAt - a.updatedAt),
+        currentId: current.id,
+      });
+      if (!choice) return;
+
+      if (choice.mode === 'new') {
+        addBinder(incoming, 'Binder imported.');
+        return;
+      }
+
+      const into = binders.find((b) => b.id === choice.binderId);
+      if (!into) { toast('That binder is no longer there.', 'error'); return; }
+      const firstNew = into.pages.length;
+      into.pages.push(...incoming.pages);   // import already gave them fresh ids
+      into.updatedAt = Date.now();
+      const res = store.saveBinders(binders);
+      if (!res.ok) { toast(res.message, 'error'); return; }
+
+      openBinder(into);            // also starts a fresh history
+      goToPage(firstNew);          // land on the first page that arrived
+      toast(`Added ${incoming.pages.length} page` +
+            `${incoming.pages.length === 1 ? '' : 's'} to the end of “${into.name}”.`);
     } catch (err) {
       toast(err.message || 'That file could not be read.', 'error');
     }

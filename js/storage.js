@@ -1,7 +1,7 @@
 // Saving: binders in localStorage, uploads kept separately, plus file
 // export/import and share links.
 
-import { makePage, reseedIds, flatten } from './layout.js';
+import { makePage, reseedIds, flatten, freshIds } from './layout.js';
 import * as inserts from './inserts.js';
 
 const BINDERS_KEY = 'michi.binders.v1';
@@ -126,8 +126,12 @@ export async function importBinder(text) {
     }
   }
 
-  reseedIds(binder.pages);
   normalizePages(binder.pages);
+  // Fresh ids, not reseeded ones. The file's ids mean nothing here, and seeding
+  // the counter from them would drop it below ids already in use, so the next
+  // pocket created would collide. This also lets the pages be appended to a
+  // binder that is already open.
+  freshIds(binder.pages);
   return binder;
 }
 
@@ -183,6 +187,7 @@ function unpackBinder(packed) {
   };
   // A link made before pockets were always 1x1 can still carry spanning regions.
   normalizePages(binder.pages);
+  freshIds(binder.pages);   // the s1, s2… above are only placeholders
   return binder;
 }
 

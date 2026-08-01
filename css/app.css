@@ -230,6 +230,18 @@ select.chip { border-radius: 999px; max-width: 190px; }
 .crop-hint { margin: 0; font-size: 12.5px; color: var(--dim); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+.choice-list { display: flex; flex-direction: column; gap: 8px; }
+.choice {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.choice:hover { border-color: #4b4460; }
+.choice:has(input:checked) { border-color: var(--accent); background: #3a2733; }
+.choice input { margin-top: 2px; accent-color: var(--accent); }
+.choice strong { display: block; font-size: 14px; font-weight: 600; }
+.choice small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--dim); }
+
 /* --- toolbar -------------------------------------------------------------- */
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }

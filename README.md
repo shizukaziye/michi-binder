@@ -24,6 +24,8 @@ card size.
 - Several named binders, each with as many pages as you like. Everything saves
   in the browser as you go.
 - Export a binder to a file, or copy a link that carries the whole design.
+  Importing asks whether the file should be its own binder or have its pages
+  added to the back of one you already have.
 - Print at 63×88 mm with the pockets flush, so the pieces of an insert line back
   up into the whole picture before you cut them apart.
 

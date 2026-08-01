@@ -190,6 +190,18 @@ export function filledCount(page) {
   return page.regions.filter((rg) => rg.card || rg.upload).length;
 }
 
+/**
+ * Give every region on these pages a brand-new id. Pages moving into a binder
+ * they were not saved in bring their old ids with them, which would otherwise
+ * collide with the ones already there.
+ */
+export function freshIds(pages) {
+  for (const p of pages) {
+    for (const rg of p.regions) rg.id = newId();
+  }
+  return pages;
+}
+
 /** Re-seat the id counter after loading saved pages, so new ids stay unique. */
 export function reseedIds(pages) {
   let max = 0;
