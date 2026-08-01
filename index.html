@@ -85,15 +85,21 @@
 
     <p class="size-note" id="sizeNote" hidden></p>
 
-    <div class="canvas-wrap">
-      <div class="page-col">
-        <div class="page-caption" id="captionL"></div>
-        <div id="canvasL" class="canvas"></div>
+    <div class="stage">
+      <div class="canvas-wrap">
+        <div class="page-col">
+          <div class="page-caption" id="captionL"></div>
+          <div id="canvasL" class="canvas"></div>
+        </div>
+        <div class="page-col" id="colR" hidden>
+          <div class="page-caption" id="captionR"></div>
+          <div id="canvasR" class="canvas"></div>
+        </div>
       </div>
-      <div class="page-col" id="colR" hidden>
-        <div class="page-caption" id="captionR"></div>
-        <div id="canvasR" class="canvas"></div>
-      </div>
+      <aside class="page-list">
+        <h2 class="page-list-title">Pages</h2>
+        <div class="page-strip" id="pageStrip" aria-label="Pages"></div>
+      </aside>
     </div>
 
     <div class="page-nav">
@@ -111,7 +117,6 @@
         <button type="button" id="combineNext" class="btn" title="Lay the next page beside this one as one spread">Combine →</button>
         <button type="button" id="deletePage" class="btn danger">Delete page</button>
       </div>
-      <div class="page-strip" id="pageStrip" aria-label="Pages"></div>
     </div>
 
     <details class="help">

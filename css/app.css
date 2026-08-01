@@ -245,7 +245,16 @@ select.chip { border-radius: 999px; max-width: 190px; }
 
 /* --- the page ------------------------------------------------------------- */
 
-.canvas-wrap { display: flex; justify-content: center; gap: 22px; align-items: flex-start; }
+/* Page and its list of pages, side by side. */
+.stage { display: flex; gap: 18px; align-items: flex-start; }
+.page-list { flex: 0 0 200px; display: flex; flex-direction: column; gap: 8px; }
+.page-list-title { margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+@media (max-width: 720px) {
+  .stage { flex-direction: column; align-items: stretch; }
+  .page-list { flex: 1 1 auto; width: 100%; }
+}
+
+.canvas-wrap { flex: 1 1 auto; min-width: 0; display: flex; justify-content: center; gap: 22px; align-items: flex-start; }
 .page-col { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; min-width: 0; }
 .page-col[hidden] { display: none; } /* a class display rule would otherwise beat [hidden] */
 .canvas { width: 100%; }
@@ -318,7 +327,7 @@ select.chip { border-radius: 999px; max-width: 190px; }
 .page-label { font-size: 13px; color: var(--dim); min-width: 96px; }
 
 /* The page list: a readable vertical column, number + name, drag to reorder. */
-.page-strip { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.page-strip { display: flex; flex-direction: column; gap: 4px; max-height: 70vh; overflow-y: auto; }
 .page-pip {
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 7px 12px; border-radius: 8px; text-align: left;
