@@ -38,10 +38,19 @@ export function newBinder(name = 'Untitled binder') {
   return { id: uid(), name, pages: [makePage(3, 3)], updatedAt: Date.now() };
 }
 
+// Older pages predate the spread flag; infer it once from the old rule (a page
+// twice as wide as tall was a combined spread) so they keep filling an opening.
+export function normalizePages(pages) {
+  for (const p of pages || []) {
+    if (p.spread === undefined) p.spread = p.cols === 2 * p.rows;
+  }
+}
+
 export function loadBinders() {
   const list = read(BINDERS_KEY, null);
   if (!Array.isArray(list) || list.length === 0) return [newBinder('My binder')];
   reseedIds(list.flatMap((b) => b.pages || []));
+  for (const b of list) normalizePages(b.pages);
   return list;
 }
 
@@ -115,6 +124,7 @@ export async function importBinder(text) {
   }
 
   reseedIds(binder.pages);
+  normalizePages(binder.pages);
   return binder;
 }
 
@@ -139,6 +149,7 @@ function packBinder(binder) {
         rg.empty ? 1 : 0,
       ]),
       pg.name || '',
+      pg.spread ? 1 : 0,
     ]),
   };
 }
@@ -150,10 +161,12 @@ function unpackBinder(packed) {
     id: uid(),
     name: packed.n || 'Shared binder',
     updatedAt: Date.now(),
-    pages: packed.p.map(([rows, cols, regions, name]) => ({
+    pages: packed.p.map(([rows, cols, regions, name, spread]) => ({
       rows,
       cols,
       name: name || '',
+      // New links carry the flag; older ones fall back to the old width rule.
+      spread: spread != null ? !!spread : cols === 2 * rows,
       regions: regions.map(([r0, c0, r1, c1, card, fit, empty]) => ({
         id: `s${n++}`,
         r0, c0, r1, c1,

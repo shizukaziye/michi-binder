@@ -6,8 +6,8 @@
 // makes a Michi panel: one picture spread over several pockets.
 
 export const MIN_DIM = 1;
-// Up to 6 so two pages can combine into a spread (e.g. 3x3 + 3x3 = 3x6).
-export const MAX_DIM = 6;
+// Up to 8 so two pages can combine into a spread (e.g. 4x3 + 4x3 = 8x3).
+export const MAX_DIM = 8;
 
 let nextId = 1;
 const newId = () => `r${nextId++}`;
@@ -24,7 +24,7 @@ export function makeRegion(r0, c0, r1, c1) {
 }
 
 export function makePage(rows = 3, cols = 3) {
-  const page = { rows, cols, name: '', regions: [] };
+  const page = { rows, cols, name: '', spread: false, regions: [] };
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) page.regions.push(makeRegion(r, c, r, c));
   }

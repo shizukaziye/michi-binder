@@ -24,8 +24,8 @@ let insertPanel = null;
 
 const page = () => current.pages[pageIndex];
 
-/** A wide page (6x3 = two 3x3s) is worth two binder faces. */
-const isSpreadPage = (pg) => !!pg && pg.cols === 2 * pg.rows;
+/** A spread page (made by Combine) is worth two binder faces. */
+const isSpreadPage = (pg) => !!pg && !!pg.spread;
 
 /**
  * Lay the pages into binder openings. Page 1 sits alone, like a real binder's
@@ -398,6 +398,7 @@ function combineWithNext() {
     rows,
     cols,
     name: a.name || b.name || '',
+    spread: true, // two faces: fills a whole opening in spread view
     regions: [
       ...a.regions.map((rg) => lift(rg, 0)),
       ...b.regions.map((rg) => lift(rg, a.cols)),
@@ -696,6 +697,7 @@ function applySize(rows, cols) {
     return;
   }
   resize(pg, rows, cols);
+  pg.spread = false; // a hand-sized page is a native page, not a combined spread
   goToPage(pageIndex);
   onChange();
 }
