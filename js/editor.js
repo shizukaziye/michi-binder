@@ -84,7 +84,7 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
   function setSelection(a, f) {
     anchor = a;
     focus = f;
-    render();
+    paintSelection();
   }
 
   function artOf(rg) {
@@ -198,7 +198,7 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
   function wireRegion(el, rg) {
     el.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
-      if (e.shiftKey && anchor) { focus = rg; render(); return; }
+      if (e.shiftKey && anchor) { focus = rg; paintSelection(); return; }
       // Press selects this one pocket. Then, while the button stays down, a drag
       // from an EMPTY pocket sweeps a selection; a drag from a FILLED one moves
       // the card. Release ends it — selection never changes with the button up.
@@ -208,12 +208,18 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
       down = true;
       kind = artOf(rg) ? 'pending-move' : 'select';
       start = { rg, x: e.clientX, y: e.clientY };
-      render();
+      paintSelection();
     });
 
-    el.addEventListener('pointerenter', () => {
+    el.addEventListener('pointerenter', (e) => {
       // Extend the selection only while sweeping with the button held.
-      if (down && kind === 'select') { focus = rg; render(); }
+      if (!down || kind !== 'select') return;
+      // No capture means a release outside the window never reaches us. If the
+      // button is up by the time the pointer comes back, the gesture is over —
+      // without this the selection would chase the loose mouse forever.
+      if (e.buttons === 0) { endGesture(); return; }
+      focus = rg;
+      paintSelection();
     });
 
     el.addEventListener('dragover', (e) => {
@@ -301,6 +307,23 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
     commit();
   }
 
+  /**
+   * Repaint only the selection outlines. Selecting never changes the page
+   * structure, so gestures must not rebuild the grid: a rebuild destroys the
+   * element under the pointer mid-press, and the browser then re-fires (or
+   * drops) the boundary events against the replacement nodes.
+   */
+  function paintSelection() {
+    if (!page) return;
+    const rc = rect();
+    for (const rg of page.regions) {
+      const on = !!rc &&
+        rg.r0 <= rc.r1 && rg.r1 >= rc.r0 && rg.c0 <= rc.c1 && rg.c1 >= rc.c0;
+      regionEl(rg.id)?.classList.toggle('selected', on);
+    }
+    announce();
+  }
+
   function render() {
     if (!page) return;
     grid.style.setProperty('--rows', page.rows);
@@ -321,13 +344,16 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
 
   window.addEventListener('pointermove', (e) => {
     if (!down || !start) return;
+    // The same lost-release guard as the sweep: a move with no button held
+    // means the pointerup happened somewhere we never heard it.
+    if (e.buttons === 0) { endGesture(); return; }
     // A press on a card becomes a move once it travels past the threshold.
     if (kind === 'pending-move') {
       if (Math.hypot(e.clientX - start.x, e.clientY - start.y) <= MOVE_THRESHOLD) return;
       kind = 'move';
       anchor = start.rg; focus = start.rg; // a move keeps just the source selected
       regionEl(start.rg.id)?.classList.add('source');
-      render();
+      paintSelection();
     }
     if (kind === 'move') {
       const over = document.elementFromPoint(e.clientX, e.clientY);
@@ -345,17 +371,17 @@ export function mountEditor(root, { onChange, onSelect, onNotice, onFileDrop, on
       // The target may sit on the other page of a spread, so the app resolves
       // both ends and performs the swap; here we just report the two pockets.
       if (targetId && targetId !== fromId && onMove) onMove(fromId, targetId);
-      else render();
       return;
     }
     // A click or a finished sweep: just stop. The selection stays as it is.
     endGesture();
-    render();
   });
 
-  // If the OS or browser cancels the pointer (native drag, gesture steal), drop
-  // the half-finished gesture so it never keeps tracking the loose mouse.
-  window.addEventListener('pointercancel', () => { endGesture(); render(); });
+  // If the OS or browser cancels the pointer (native drag, gesture steal), or
+  // the window loses focus mid-press, drop the half-finished gesture so it
+  // never keeps tracking the loose mouse.
+  window.addEventListener('pointercancel', endGesture);
+  window.addEventListener('blur', endGesture);
   // Belt and braces: never let a native drag begin from inside the page grid.
   grid.addEventListener('dragstart', (e) => {
     if (e.target.closest('.region')) e.preventDefault();
