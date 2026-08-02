@@ -63,10 +63,16 @@ fills those gaps twice over:
    way carry a `p` flag, because that CDN shapes its URLs differently:
    `_hires.png` on the card rather than `/high.webp` on a folder.
 
-Every borrowed URL is checked before it is kept, and a set is only worked
-through once a sample proves the numbering lines up. Cards neither source has a
-scan for are dropped — currently 869 of 23,505, almost all trainer kits, e-card
-variants, and sets too new to have been photographed.
+Every URL is then checked, borrowed or not. A non-null image field from TCGdex
+is a claim rather than a promise: the whole of Pitch Black (`me05`) was listed
+with image URLs long before any scan was uploaded, and all 120 of them 404.
+Anything that fails is checked twice before being dropped, so a momentary
+network fault cannot quietly delete half the index, and a build that loses more
+than a tenth of the catalogue refuses to write at all.
+
+Cards no source has a scan for are dropped rather than shown blank — they are
+no use in a tool for choosing artwork. The weekly rebuild picks them up as soon
+as the scans appear.
 
 A GitHub Action reruns this every Monday and commits anything new.
 

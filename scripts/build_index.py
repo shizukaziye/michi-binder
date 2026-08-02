@@ -13,11 +13,14 @@ Writes data/cards.json and data/sets.json.
 import json
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import requests
 
 API = "https://api.tcgdex.net/v2/en"
 GRAPHQL = "https://api.tcgdex.net/v2/graphql"
@@ -131,17 +134,34 @@ def recoverable(set_id, local_id):
     return bool(local_id)
 
 
+_local = threading.local()
+
+
+def session():
+    """A connection pool per thread.
+
+    There are north of 22,000 pictures to check, and opening a fresh TLS
+    connection for each one takes the run from a minute to well over half an
+    hour. Keeping the connection open between checks is the whole difference.
+    """
+    s = getattr(_local, "session", None)
+    if s is None:
+        s = requests.Session()
+        s.headers.update({"User-Agent": UA})
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=4, pool_maxsize=4, max_retries=2
+        )
+        s.mount("https://", adapter)
+        _local.session = s
+    return s
+
+
 def image_exists(url):
     """True if the asset resolves. A one-byte range keeps it off the wire."""
     try:
-        req = urllib.request.Request(
-            url, headers={"User-Agent": UA, "Range": "bytes=0-0"}
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.status in (200, 206)
-    except urllib.error.HTTPError as exc:
-        return exc.code in (200, 206)
-    except (urllib.error.URLError, TimeoutError):
+        resp = session().get(url, headers={"Range": "bytes=0-0"}, timeout=30)
+        return resp.status_code in (200, 206)
+    except requests.RequestException:
         return False
 
 
@@ -255,6 +275,42 @@ def recover_from_ptcg(pending, cards, set_names):
     return found, sets_done
 
 
+def thumb_url(rec):
+    """The picture the site actually shows first, and so the one worth checking."""
+    return rec["u"] + (".png" if rec.get("p") == "p" else "/low.webp")
+
+
+def verify_images(cards):
+    """Return the ids whose picture is not really there.
+
+    A non-null image field from TCGdex is a claim, not a promise: the whole of
+    Pitch Black (me05) was listed with image URLs long before any scan was
+    uploaded, and all 120 of them 404. Only recovered cards used to be checked,
+    so these went straight into the index and showed as blanks.
+
+    Anything that fails is checked a second time, because a momentary network
+    fault should not quietly delete half the index.
+    """
+    items = list(cards.items())
+
+    def probe(kv):
+        return kv[0], image_exists(thumb_url(kv[1]))
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        first = list(pool.map(probe, items))
+
+    suspect = [cid for cid, good in first if not good]
+    if not suspect:
+        return []
+
+    print(f"  re-checking {len(suspect)} that did not answer...")
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        second = list(pool.map(
+            lambda cid: (cid, image_exists(thumb_url(cards[cid]))), suspect
+        ))
+    return [cid for cid, good in second if not good]
+
+
 def main():
     print("fetching rarities...")
     rarities = get_json(f"{API}/rarities")
@@ -333,25 +389,58 @@ def main():
     raw_sets = get_json(f"{API}/sets")
     set_names = {s["id"]: s["name"] for s in raw_sets}
 
-    # Whatever TCGdex simply has no scan for, try the second source.
+    # Check the URLs TCGdex handed over before trusting them, and do it BEFORE
+    # asking the second source, so a card with a broken link gets the same
+    # chance of rescue as one with no link at all.
+    print(f"checking all {len(cards)} pictures really exist...")
+    before = len(cards)
+    broken = verify_images(cards)
+    for cid in broken:
+        rec = cards.pop(cid)
+        rec.pop("u", None)
+        rec.pop("p", None)
+        pending[cid] = rec
+    print(f"  {len(broken)} were listed but not there")
+
     still_missing = sum(1 for cid in pending if cid not in cards)
-    print(f"filling {still_missing} remaining gaps from pokemontcg.io...")
+    print(f"filling {still_missing} gaps from pokemontcg.io...")
     borrowed, borrowed_sets = recover_from_ptcg(pending, cards, set_names)
     print(f"  added {borrowed} cards from {borrowed_sets} sets")
 
+    lost = [rec for cid, rec in pending.items() if cid not in cards]
+    by_set = {}
+    for rec in lost:
+        by_set[rec["s"]] = by_set.get(rec["s"], 0) + 1
+    if by_set:
+        print(f"no picture from either source for {len(lost)} cards:")
+        for set_id, n in sorted(by_set.items(), key=lambda kv: -kv[1])[:12]:
+            print(f"    {set_id:<14} {n:>4}  ({set_names.get(set_id, set_id)})")
+
+    # A wholesale failure means the network, not the catalogue. Better to keep
+    # the index that already works than publish a gutted one.
+    if before and len(broken) / before > 0.10:
+        print(f"ERROR: {len(broken)} of {before} pictures failed. That looks "
+              f"like a network problem, so the index has not been written.",
+              file=sys.stderr)
+        return 1
+
+    # Only sets we actually kept a card from. A set nobody has photographed yet
+    # would otherwise sit in the filter offering nothing.
+    used = {c["s"] for c in cards.values()}
     sets = {}
     for s in raw_sets:
-        sets[s["id"]] = {
-            "i": s["id"],
-            "n": s["name"],
-            "d": (s.get("releaseDate") or ""),
-        }
+        if s["id"] in used:
+            sets[s["id"]] = {
+                "i": s["id"],
+                "n": s["name"],
+                "d": (s.get("releaseDate") or ""),
+            }
 
     # Any set id we derived but that the sets list does not know about still
     # needs a display name, or the UI shows a blank.
-    for c in cards.values():
-        if c["s"] not in sets:
-            sets[c["s"]] = {"i": c["s"], "n": c["s"], "d": ""}
+    for set_id in used:
+        if set_id not in sets:
+            sets[set_id] = {"i": set_id, "n": set_id, "d": ""}
 
     OUT.mkdir(parents=True, exist_ok=True)
     card_list = sorted(cards.values(), key=lambda c: (c["n"].lower(), c["i"]))
