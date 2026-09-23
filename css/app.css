@@ -63,7 +63,7 @@ a { color: var(--accent-soft); }
   padding: 10px 16px;
   background: var(--bg-2);
   border-bottom: 1px solid var(--line);
-  position: sticky; top: 0; z-index: 30;
+  position: sticky; top: var(--site-nav-offset, 0px); z-index: 30;
 }
 .brand { display: flex; align-items: center; gap: 9px; margin-right: auto; }
 .brand h1 { font-size: 17px; margin: 0; letter-spacing: .2px; white-space: nowrap; }
@@ -92,8 +92,8 @@ a { color: var(--accent-soft); }
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px;
-  position: sticky; top: 74px;
-  max-height: calc(100vh - 96px);
+  position: sticky; top: calc(74px + var(--site-nav-offset, 0px));
+  max-height: calc(100vh - 96px - var(--site-nav-offset, 0px));
   display: flex; flex-direction: column; gap: 10px;
 }
 .panel-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
